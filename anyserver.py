@@ -4,8 +4,8 @@ app = Flask(__name__)
  
 @app.route('/')
 def index():
+    print("hithere")
     return "Hello World!"
-
 
 
 
@@ -61,7 +61,7 @@ def index():
 #     # return render_template('index.html', form=form)
 
 
-# if __name__ == "__main__":
-#     print(("The website is up"))
-#     # Run app
-#     app.run(host="0.0.0.0", port=80)
+if __name__ == "__main__":
+    print(("The website is up"))
+    # Run app
+    app.run(host="0.0.0.0", port=80)
