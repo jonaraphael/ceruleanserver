@@ -3,30 +3,10 @@ import json
 import requests
 import shapely.geometry as sh
 import psycopg2
+from data import DBConnection
 
 # Create app
 app = Flask(__name__)
-
-def insert_into_image_table(sns_msg, oceanic):
-    cur = conn.cursor()
-    cmd = f"""
-        INSERT INTO public."IMAGE"
-        VALUES(
-            '{sns_msg["id"]}',
-            '{sns_msg["startTime"].replace("T", " ")}',
-            '{oceanic}',
-            ST_GeomFromGeoJSON('{json.dumps(sns_msg["footprint"])}'),
-            '{sns_msg["polarization"]}',
-            '{sns_msg["mode"]}',
-            '{sns_msg["path"]}'
-        )
-    """
-    # print(cmd)
-    cur.execute(cmd)
-    cur.close()
-
-def db_connect():
-    return psycopg2.connect(host='slick-db.cboaxrzskot9.eu-central-1.rds.amazonaws.com', user='postgres', password='postgres', database='slick_db', port="5432")
 
 def process_sns(sns):
     pass
@@ -43,7 +23,7 @@ def filter_oceans(sns):
     ocean = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
     # print(scene_poly.intersects(ocean))
     oceanic = scene_poly.intersects(ocean)
-    insert_into_image_table(msg, oceanic)
+    db.insert_into_image_table(msg, oceanic)
     if oceanic:
         process_sns(sns)
 
@@ -96,8 +76,8 @@ def home():
     return make_response(jsonify(res), res["status_code"])
 
 if __name__ == "__main__":    
-    conn = db_connect()
-    conn.set_session(autocommit=True)
+    db = DBConnection(host='slick-db.cboaxrzskot9.eu-central-1.rds.amazonaws.com', user='postgres', 
+    password='postgres', database='slick_db', port="5432")
 
     app.run(host="0.0.0.0", port=80, debug=True) #, ssl_context=('cert.pem', 'key.pem'))
     # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"
