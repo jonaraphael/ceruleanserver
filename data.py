@@ -3,6 +3,7 @@ class DBConnection:
     def init(self, host, user, password, database, port):
         self.conn = psycopg2.connect(host, user, password, database, port)
         self.conn.set_session(autocommit=True)
+        
     def insert_into_image_table(self, sns_msg, oceanic):
         cur = self.conn.cursor()
         cmd = f"""

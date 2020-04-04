@@ -2,7 +2,6 @@ from flask import Flask, request, make_response, jsonify
 import json
 import requests
 import shapely.geometry as sh
-import psycopg2
 from data import DBConnection
 from config import Config
 
