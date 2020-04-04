@@ -4,6 +4,7 @@ import requests
 import shapely.geometry as sh
 import psycopg2
 from data import DBConnection
+from config import Config
 
 # Create app
 app = Flask(__name__)
@@ -76,8 +77,8 @@ def home():
     return make_response(jsonify(res), res["status_code"])
 
 if __name__ == "__main__":    
-    db = DBConnection(host='slick-db.cboaxrzskot9.eu-central-1.rds.amazonaws.com', user='postgres', 
-    password='postgres', database='slick_db', port="5432")
+    db = DBConnection(Config.db_host, Config.db_user, Config.db_password, 
+    Config.db_database, Config.db_port)
 
-    app.run(host="0.0.0.0", port=80, debug=True) #, ssl_context=('cert.pem', 'key.pem'))
+    app.run(Config.app_host, Config.app_port, Config.app_debug) #, ssl_context=('cert.pem', 'key.pem'))
     # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"
