@@ -2,10 +2,12 @@
 import os
 import xmltodict
 from datetime import datetime
+import shapely as sh
 
 class SHO:
-    def __init__(self, sns_msg, user="jonaraph", pwd="fjjEwvMDHyJH9Fa"):
+    def __init__(self, sns_msg, user, pwd):
         self.grd_id = sns_msg["id"]
+        # self.grd_id = "S1B_IW_GRDH_1SDV_20200402T003114_20200402T003139_020958_027C13_47BB"
         self.user = user
         self.pwd = pwd
         self.dir = self.grd_id
@@ -60,6 +62,12 @@ class SHO:
             print('ERROR No grd tiff found with VV polarization')
         return os.system(self.download_strs.get("download_grd_tiff"))
 
+    def update_intersection(self, geoshape):
+        scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
+        self.isoceanic = scene_poly.intersects(geoshape)
+        self.oceanintersection = scene_poly.intersection(geoshape)
+        return self.isoceanic
+
     def grd_db_row(self):
         res = {
             "GRD_scihub_uuid" : self.grd_shid,
@@ -89,7 +97,8 @@ class SHO:
             "acquisitiontype" : xml_get(self.grd_xml.get('str'), 'acquisitiontype'),
             "status" : xml_get(self.grd_xml.get('str'), 'status'),
             "size" : xml_get(self.grd_xml.get('str'), 'size'),
-            "footprint" : xml_get(self.grd_xml.get('str'), 'footprint'),
+            # "footprint" : xml_get(self.grd_xml.get('str'), 'footprint'),
+            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(sns_msg['footprint']['coordinates'][0][0])}')"
             "isoceanic" : self.isoceanic,
             "oceanintersection" : self.oceanintersection, 
             "timestamp" : str_to_dt(xml_get(self.grd_xml.get('date'),'beginposition')).timestamp(),

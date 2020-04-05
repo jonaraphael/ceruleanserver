@@ -4,43 +4,24 @@ import requests
 import shapely.geometry as sh
 from data import DBConnection
 from config import Config
+from SciHub_class import SHO
 
 # Create app
 app = Flask(__name__)
 
 def process_sns(sns):
-    pass
-
-def filter_oceans(sns):
-    msg = json.loads(sns['Message'])
-    # print(msg)
-    # Only process those scenes that include some portion of the ocean
-    coords = msg['footprint']['coordinates'][0][0]
-    # print(coords)
-    scene_poly = sh.polygon.Polygon(coords)
-
-    with open("OceanGeoJSON_lowres.geojson") as f: # CACHE THIS SHIT, and use high res version
-        ocean_features = json.load(f)["features"]
-    ocean = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
-    oceanic = scene_poly.intersects(ocean)
-    db.insert_into_image_table(msg, oceanic)
-    if oceanic:
-        process_sns(sns)
+    sho = SHO(json.loads(sns['Message']), Config.sh_user, Config.sh_pwd)
+    sho.update_intersection(ocean_shape)
+    # add to database
+    # if oceanic, machine learn
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])
 def home():
-    headers = request.headers
-    # print(headers)
-
     sns = {}
     if request.data:
-        # print(request.data)
         event = json.loads(request.data)
         sns = event['Records'][0]['Sns']
-        print("---------------------")
-        # print(json.dumps(sns))
-        # print("=====================")
 
     mess_type = sns.get('Type')
     if mess_type == None:
@@ -52,7 +33,7 @@ def home():
         pass
     
     if mess_type == 'SubscriptionConfirmation':
-        r = requests.get(sns.get("SubscribeURL"))
+        # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"        r = requests.get(sns.get("SubscribeURL"))
         if r.status_code > 200 and r.status_code < 300:
             res = {
                 "msg": "Subscribed successfully", 
@@ -63,7 +44,7 @@ def home():
                 "error": r.text, 
                 "status_code" : 406}
     elif mess_type == 'Notification':
-        filter_oceans(sns)
+        process_sns(sns)
         res = {
             "msg": "Notification processed",
             "Message": json.loads(sns.get("Message")), 
@@ -79,5 +60,8 @@ if __name__ == "__main__":
     db = DBConnection(Config.db_host, Config.db_user, Config.db_password, 
     Config.db_database, Config.db_port)
 
-    app.run(Config.app_host, Config.app_port, Config.app_debug) #, ssl_context=('cert.pem', 'key.pem'))
-    # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"
+    with open("OceanGeoJSON_lowres.geojson") as f:
+        ocean_features = json.load(f)["features"]
+    ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
+
+    app.run(Config.app_host, Config.app_port, Config.app_debug)

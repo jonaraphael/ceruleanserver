@@ -8,3 +8,6 @@ class Config:
     db_password = 'postgres'
     db_database = 'slick_db'
     db_port = '5432'
+
+    sh_user = 'jonaraph'
+    sh_pwd = 'fjjEwvMDHyJH9Fa'
