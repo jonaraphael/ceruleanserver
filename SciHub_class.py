@@ -1,13 +1,14 @@
-# %%
 import os
 import xmltodict
 from datetime import datetime
-import shapely as sh
+import shapely.geometry as sh
+import json
+from config import Config
 
 class SHO:
-    def __init__(self, sns_msg, user, pwd):
-        self.grd_id = sns_msg["id"]
-        # self.grd_id = "S1B_IW_GRDH_1SDV_20200402T003114_20200402T003139_020958_027C13_47BB"
+    def __init__(self, sns_msg, user=Config.sh_user, pwd=Config.sh_pwd):
+        self.sns_msg = sns_msg
+        self.grd_id = self.sns_msg["id"]
         self.user = user
         self.pwd = pwd
         self.dir = self.grd_id
@@ -55,18 +56,17 @@ class SHO:
     def download_ocn(self): 
         if not self.download_strs.get("download_ocn"):
             print('ERROR No OCN found for this GRD')
-        return os.system(self.download_strs.get("download_ocn"))
+        os.system(self.download_strs.get("download_ocn"))
     
     def download_grd_tiff(self): 
         if not self.download_strs.get("download_grd_tiff"): 
             print('ERROR No grd tiff found with VV polarization')
-        return os.system(self.download_strs.get("download_grd_tiff"))
+        os.system(self.download_strs.get("download_grd_tiff"))
 
-    def update_intersection(self, geoshape):
+    def update_intersection(self, ocean_shape):
         scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
-        self.isoceanic = scene_poly.intersects(geoshape)
-        self.oceanintersection = scene_poly.intersection(geoshape)
-        return self.isoceanic
+        self.isoceanic = scene_poly.intersects(ocean_shape)
+        self.oceanintersection = scene_poly.intersection(ocean_shape)
 
     def grd_db_row(self):
         res = {
@@ -97,10 +97,9 @@ class SHO:
             "acquisitiontype" : xml_get(self.grd_xml.get('str'), 'acquisitiontype'),
             "status" : xml_get(self.grd_xml.get('str'), 'status'),
             "size" : xml_get(self.grd_xml.get('str'), 'size'),
-            # "footprint" : xml_get(self.grd_xml.get('str'), 'footprint'),
-            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(sns_msg['footprint']['coordinates'][0][0])}')"
+            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint']['coordinates'][0][0])}')",
             "isoceanic" : self.isoceanic,
-            "oceanintersection" : self.oceanintersection, 
+            "oceanintersection" : f"ST_GeomFromGeoJSON('{self.oceanintersection.coords}')",
             "timestamp" : str_to_dt(xml_get(self.grd_xml.get('date'),'beginposition')).timestamp(),
         }
         return res
@@ -118,23 +117,13 @@ class SHO:
     
     def cleanup(self):
         os.system(f'rm -f -r {self.dir}')
-        return True
 
 def xml_get(lst, a, key1="@name", key2="#text"):
     # from a lst of dcts, find the dct that has key value pair (@name:a), then retrieve the value of (#text:?)
     if lst == None: return None # This is a hack for the case where there is no OCN product. TODO handle absent OCN higher up
-
     for dct in lst:
         if dct.get(key1) == a:
             return dct.get(key2)
     return None
 
 def str_to_dt(s): return datetime.strptime(s[:-1], '%Y-%m-%dT%H:%M:%S.%f')
-
-sns = {'Records': [{'EventSource': 'aws:sns', 'EventVersion': '1.0', 'EventSubscriptionArn': 'arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:5f87f97c-5b5c-4010-a025-ccea652d0959', 'Sns': {'Type': 'Notification', 'MessageId': '1e97e182-ad01-5321-ad0e-b73c8e45bd47', 'TopicArn': 'arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C', 'Subject': 'productAdded', 'Message': '{\n  "id" : "S1A_IW_GRDH_1SDV_20200212T112430_20200212T112455_031218_03970B_9627",\n  "path" : "GRD/2020/2/12/IW/DV/S1A_IW_GRDH_1SDV_20200212T112430_20200212T112455_031218_03970B_9627",\n  "missionId" : "S1A",\n  "productType" : "GRD",\n  "mode" : "IW",\n  "polarization" : "DV",\n  "startTime" : "2020-02-12T11:24:30",\n  "stopTime" : "2020-02-12T11:24:55",\n  "absoluteOrbitNumber" : 31218,\n  "missionDataTakeId" : 235275,\n  "productUniqueIdentifier" : "9627",\n  "sciHubIngestion" : "2020-02-12T14:54:46.890Z",\n  "s3Ingestion" : "2020-02-12T15:59:39.655Z",\n  "sciHubId" : "d1278cfd-b143-493d-9ebb-c220b0669168",\n  "footprint" : {\n    "type" : "MultiPolygon",\n    "crs" : {\n      "type" : "name",\n      "properties" : {\n        "name" : "urn:ogc:def:crs:EPSG:8.8.1:4326"\n      }\n    },\n    "coordinates" : [ [ [ [ 102.881004, -2.915022 ], [ 105.141113, -2.420639 ], [ 104.820412, -0.913624 ], [ 102.561264, -1.403244 ], [ 102.881004, -2.915022 ] ] ] ]\n  },\n  "filenameMap" : {\n    "measurement/s1a-iw-grd-vv-20200212t112430-20200212t112455-031218-03970b-001.tiff" : "measurement/iw-vv.tiff",\n    "support/s1-level-1-calibration.xsd" : "support/s1-level-1-calibration.xsd",\n    "support/s1-map-overlay.xsd" : "support/s1-map-overlay.xsd",\n    "preview/map-overlay.kml" : "preview/map-overlay.kml",\n    "annotation/s1a-iw-grd-vh-20200212t112430-20200212t112455-031218-03970b-002.xml" : "annotation/iw-vh.xml",\n    "S1A_IW_GRDH_1SDV_20200212T112430_20200212T112455_031218_03970B_9627.SAFE-report-20200212T141916.pdf" : "report-20200212T141916.pdf",\n    "support/s1-product-preview.xsd" : "support/s1-product-preview.xsd",\n    "support/s1-object-types.xsd" : "support/s1-object-types.xsd",\n    "support/s1-level-1-quicklook.xsd" : "support/s1-level-1-quicklook.xsd",\n    "preview/product-preview.html" : "preview/product-preview.html",\n    "annotation/calibration/calibration-s1a-iw-grd-vh-20200212t112430-20200212t112455-031218-03970b-002.xml" : "annotation/calibration/calibration-iw-vh.xml",\n    "measurement/s1a-iw-grd-vh-20200212t112430-20200212t112455-031218-03970b-002.tiff" : "measurement/iw-vh.tiff",\n    "support/s1-level-1-measurement.xsd" : "support/s1-level-1-measurement.xsd",\n    "support/s1-level-1-product.xsd" : "support/s1-level-1-product.xsd",\n    "support/s1-level-1-noise.xsd" : "support/s1-level-1-noise.xsd",\n    "annotation/calibration/noise-s1a-iw-grd-vv-20200212t112430-20200212t112455-031218-03970b-001.xml" : "annotation/calibration/noise-iw-vv.xml",\n    "annotation/s1a-iw-grd-vv-20200212t112430-20200212t112455-031218-03970b-001.xml" : "annotation/iw-vv.xml",\n    "preview/quick-look.png" : "preview/quick-look.png",\n    "manifest.safe" : "manifest.safe",\n    "annotation/calibration/noise-s1a-iw-grd-vh-20200212t112430-20200212t112455-031218-03970b-002.xml" : "annotation/calibration/noise-iw-vh.xml",\n    "preview/icons/logo.png" : "preview/icons/logo.png",\n    "annotation/calibration/calibration-s1a-iw-grd-vv-20200212t112430-20200212t112455-031218-03970b-001.xml" : "annotation/calibration/calibration-iw-vv.xml"\n  }\n}', 'Timestamp': '2020-02-12T16:00:04.177Z', 'SignatureVersion': '1', 'Signature': 'aAb7LvC+AoINFT+o6C6JGf1cn+5T6uopDH/zMSY9he4CeBo3STOrpXfVlRu+23IJU9ThZtnfG0T3V0qqB6j+XVVEPVccNMtrTjfPlpM3XWq6mmMmQKpsU243qVhzZPpsT0ybP5XthOdvPu6FW+Fe1TY8Seh3Se3RTLyRBzULJRYU81q19uLUniNHmD+8j1pbGeCGFOjeO4Dmbw9H7Adi2m+d18FYC+7p2RK7yBoFQJn6Io7kZyuBGch+Z9aOFQBcoAlNBFvGGZX0qHuaMftp1izdauGLj6ybn0nMvxDok2cF/iZcYhiiuJxTHn4NWdst/OEh8ybhRmefmq3QcwBSZg==', 'SigningCertUrl': 'https://sns.eu-central-1.amazonaws.com/SimpleNotificationService-a86cb10b4e1f29c941702d737128f7b6.pem', 'UnsubscribeUrl': 'https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:5f87f97c-5b5c-4010-a025-ccea652d0959', 'MessageAttributes': {}}}]}
-sns_msg = json.loads(sns['Records'][0]['Sns']['Message'])
-
-a = SHO(sns_msg)
-a
-
-# %%

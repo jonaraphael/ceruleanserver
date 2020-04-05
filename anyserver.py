@@ -10,8 +10,10 @@ from SciHub_class import SHO
 app = Flask(__name__)
 
 def process_sns(sns):
-    sho = SHO(json.loads(sns['Message']), Config.sh_user, Config.sh_pwd)
+    sho = SHO(json.loads(sns['Message']))
     sho.update_intersection(ocean_shape)
+    print(sho.grd_db_row())
+    sho.cleanup()
     # add to database
     # if oceanic, machine learn
 
@@ -57,8 +59,7 @@ def home():
     return make_response(jsonify(res), res["status_code"])
 
 if __name__ == "__main__":    
-    db = DBConnection(Config.db_host, Config.db_user, Config.db_password, 
-    Config.db_database, Config.db_port)
+    db = DBConnection()
 
     with open("OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
