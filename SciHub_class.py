@@ -8,15 +8,17 @@ class Sho:
         self.grd_id = grd_id
         self.user = user
         self.pwd = pwd
+        self.dir = grd_id
         self.isoceanic = None
         self.oceanintersection = None
 
         self.generic_id = grd_id[:7]+"????_?"+grd_id[13:-4]+"*"
         self.URLs = {"query_prods" : f"https://scihub.copernicus.eu/apihub/search?rows=100&q=(platformname:Sentinel-1 AND filename:{self.generic_id})",}
-        self.wgets = {"query_prods" : f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document=query_prods_results.xml "{self.URLs["query_prods"]}"',}
+        self.wgets = {"query_prods" : f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/query_prods_results.xml "{self.URLs["query_prods"]}"',}
         
+        os.system(f'mkdir {self.dir}')
         os.system(self.wgets['query_prods'])
-        with open('query_prods_results.xml') as f:
+        with open(f'{self.dir}/query_prods_results.xml') as f:
             self.query_prods_res = xmltodict.parse(f.read())
         if self.query_prods_res.get('feed').get('opensearch:totalResults') == '0':
             print(f'ERROR No results found matching {self.grd_id}')
@@ -32,19 +34,19 @@ class Sho:
         self.URLs["download_grd"] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.grd_shid}')/%24value"
         self.URLs["download_ocn"] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.ocn_shid}')/%24value"
 
-        self.wgets["query_grd_tiffs"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document=query_grd_tiffs_results.xml "{self.URLs["query_grd_tiffs"]}"'
-        self.wgets["download_grd"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document=grd.zip "{self.URLs["download_grd"]}"'
-        self.wgets["download_ocn"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document=ocn.zip "{self.URLs["download_ocn"]}"'
+        self.wgets["query_grd_tiffs"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/query_grd_tiffs_results.xml "{self.URLs["query_grd_tiffs"]}"'
+        self.wgets["download_grd"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/grd.zip "{self.URLs["download_grd"]}"'
+        self.wgets["download_ocn"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/ocn.zip "{self.URLs["download_ocn"]}"'
 
         os.system(self.wgets['query_grd_tiffs'])
-        with open('query_grd_tiffs_results.xml') as f:
+        with open(f'{self.dir}/query_grd_tiffs_results.xml') as f:
             self.query_grd_tiffs_res = xmltodict.parse(f.read())
         
         grd_vv = [e for e in self.query_grd_tiffs_res.get('feed').get('entry') if '-vv-' in e.get('title').get('#text')][0]
         self.grd_vv = grd_vv.get('title').get('#text')
 
         self.URLs['download_grd_tiff'] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.grd_shid}')/Nodes('{self.grd_id}.SAFE')/Nodes('measurement')/Nodes('{self.grd_vv}')/$value"
-        self.wgets['download_grd_tiff'] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document=grd_vv.tiff "{self.URLs["download_grd_tiff"]}"'
+        self.wgets['download_grd_tiff'] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/grd_vv.tiff "{self.URLs["download_grd_tiff"]}"'
 
     def __repr__(self):
         return f"<SciHubObject: {self.grd_id}>"
@@ -101,6 +103,10 @@ class Sho:
             "GRD_scihub_uuid" : self.grd_shid,
         }
         return res
+    
+    def cleanup(self):
+        os.system(f'rm -f -r {self.dir}')
+        return True
 
 def xml_get(lst, a, key1="@name", key2="#text"):
     # from a lst of dcts, find the dct that has key value pair (@name:a), then retrieve the value of (#text:?)
