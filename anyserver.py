@@ -7,7 +7,7 @@ import psycopg2
 # Create app
 app = Flask(__name__)
 
-def insert_into_image_table(sns_msg, oceanic):
+def insert_into_image_table(sns_msg, oceanic, inter_proj):
     cur = conn.cursor()
     cmd = f"""
         INSERT INTO public."IMAGE"
@@ -18,7 +18,8 @@ def insert_into_image_table(sns_msg, oceanic):
             ST_GeomFromGeoJSON('{json.dumps(sns_msg["footprint"])}'),
             '{sns_msg["polarization"]}',
             '{sns_msg["mode"]}',
-            '{sns_msg["path"]}'
+            '{sns_msg["path"]}',
+            ST_GeomFromGeoJSON('{json.dumps(inter_proj)}')
         )
     """
     # print(cmd)
@@ -33,17 +34,19 @@ def process_sns(sns):
 
 def filter_oceans(sns):
     msg = json.loads(sns['Message'])
+    # print(msg)
     # Only process those scenes that include some portion of the ocean
     coords = msg['footprint']['coordinates'][0][0]
     # print(coords)
     scene_poly = sh.polygon.Polygon(coords)
 
-    with open("OceanGeoJSON_lowres.geojson") as f:
+    with open("OceanGeoJSON_lowres.geojson") as f: # CACHE THIS SHIT, and use high res version
         ocean_features = json.load(f)["features"]
     ocean = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
-    # print(scene_poly.intersects(ocean))
     oceanic = scene_poly.intersects(ocean)
-    insert_into_image_table(msg, oceanic)
+    inter = scene_poly.intersection(ocean)
+    inter_proj = {k: sh.mapping(inter).get(k, v) for k, v in msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
+    insert_into_image_table(msg, oceanic, inter_proj)
     if oceanic:
         process_sns(sns)
 
@@ -96,8 +99,9 @@ def home():
     return make_response(jsonify(res), res["status_code"])
 
 if __name__ == "__main__":    
-    conn = db_connect()
+    conn = db_connect() # XXX Is this behavior unsafe for threading?! Concurrency issues
     conn.set_session(autocommit=True)
+    highresmap=
 
     app.run(host="0.0.0.0", port=80, debug=True) #, ssl_context=('cert.pem', 'key.pem'))
     # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"
