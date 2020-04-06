@@ -12,7 +12,9 @@ app = Flask(__name__)
 def process_sns(sns):
     sho = SHO(json.loads(sns['Message']))
     sho.update_intersection(ocean_shape)
+    print(json.loads(sns['Message']))
     print(sho.grd_db_row())
+    print(sho.ocn_id)
     sho.cleanup()
     # add to database
     # if oceanic, machine learn

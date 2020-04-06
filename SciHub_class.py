@@ -66,7 +66,8 @@ class SHO:
     def update_intersection(self, ocean_shape):
         scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
         self.isoceanic = scene_poly.intersects(ocean_shape)
-        self.oceanintersection = scene_poly.intersection(ocean_shape)
+        inter = scene_poly.intersection(ocean_shape)
+        self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
 
     def grd_db_row(self):
         res = {
@@ -97,9 +98,9 @@ class SHO:
             "acquisitiontype" : xml_get(self.grd_xml.get('str'), 'acquisitiontype'),
             "status" : xml_get(self.grd_xml.get('str'), 'status'),
             "size" : xml_get(self.grd_xml.get('str'), 'size'),
-            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint']['coordinates'][0][0])}')",
+            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "isoceanic" : self.isoceanic,
-            "oceanintersection" : f"ST_GeomFromGeoJSON('{self.oceanintersection.coords}')",
+            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else "",
             "timestamp" : str_to_dt(xml_get(self.grd_xml.get('date'),'beginposition')).timestamp(),
         }
         return res
