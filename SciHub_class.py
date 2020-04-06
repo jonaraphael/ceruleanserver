@@ -1,125 +1,130 @@
-# %%
 import os
 import xmltodict
 from datetime import datetime
+import shapely.geometry as sh
+import json
+from config import Config
 
-class Sho:
-    def __init__(self, grd_id, user="jonaraph", pwd="fjjEwvMDHyJH9Fa"):
-        self.grd_id = grd_id
+class SHO:
+    def __init__(self, sns_msg, user=Config.sh_user, pwd=Config.sh_pwd):
+        self.sns_msg = sns_msg
+        self.grd_id = self.sns_msg["id"]
         self.user = user
         self.pwd = pwd
-        self.dir = grd_id
+        self.dir = self.grd_id
         self.isoceanic = None
         self.oceanintersection = None
 
-        self.generic_id = grd_id[:7]+"????_?"+grd_id[13:-4]+"*"
+        self.generic_id = self.grd_id[:7]+"????_?"+self.grd_id[13:-4]+"*"
         self.URLs = {"query_prods" : f"https://scihub.copernicus.eu/apihub/search?rows=100&q=(platformname:Sentinel-1 AND filename:{self.generic_id})",}
-        self.wgets = {"query_prods" : f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/query_prods_results.xml "{self.URLs["query_prods"]}"',}
+        self.download_strs = {"query_prods" : f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/query_prods_results.xml "{self.URLs["query_prods"]}"',}
         
         os.system(f'mkdir {self.dir}')
-        os.system(self.wgets['query_prods'])
+        os.system(self.download_strs['query_prods'])
         with open(f'{self.dir}/query_prods_results.xml') as f:
             self.query_prods_res = xmltodict.parse(f.read())
         if self.query_prods_res.get('feed').get('opensearch:totalResults') == '0':
             print(f'ERROR No results found matching {self.grd_id}')
             return
+        prods = self.query_prods_res.get('feed').get('entry')
+        if isinstance(prods, dict): prods = [prods] # If there's only one product, xmlparser returns a dict instead of a list of dicts
+        self.grd_xml = {}
+        self.ocn_xml = {}
+        for p in prods:
+            if 'GRD' in p.get('title'): self.grd_xml = p
+            if 'OCN' in p.get('title'): self.ocn_xml = p
 
-        grd = [e for e in self.query_prods_res.get('feed').get('entry') if 'GRD' in e.get('title')][0]
-        ocn = [e for e in self.query_prods_res.get('feed').get('entry') if 'OCN' in e.get('title')][0]
-        self.ocn_id = ocn.get('title')
-        self.ocn_shid = ocn.get('id')
-        self.grd_shid = grd.get('id')
+        self.grd_shid = self.grd_xml.get('id')
+        self.ocn_id = self.ocn_xml.get('title')
+        self.ocn_shid = self.ocn_xml.get('id')
 
-        self.URLs['query_grd_tiffs'] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products(\'{self.grd_shid}\')/Nodes(\'{self.grd_id}.SAFE\')/Nodes('measurement')/Nodes"
-        self.URLs["download_grd"] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.grd_shid}')/%24value"
-        self.URLs["download_ocn"] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.ocn_shid}')/%24value"
+        if self.ocn_xml:
+            self.URLs["download_ocn"] = f"https://scihubf.copernicus.eu/dhus/odata/v1/Products('{self.ocn_shid}')/%24value"
+            self.download_strs["download_ocn"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/ocn.zip "{self.URLs["download_ocn"]}"'
 
-        self.wgets["query_grd_tiffs"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/query_grd_tiffs_results.xml "{self.URLs["query_grd_tiffs"]}"'
-        self.wgets["download_grd"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/grd.zip "{self.URLs["download_grd"]}"'
-        self.wgets["download_ocn"] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/ocn.zip "{self.URLs["download_ocn"]}"'
-
-        os.system(self.wgets['query_grd_tiffs'])
-        with open(f'{self.dir}/query_grd_tiffs_results.xml') as f:
-            self.query_grd_tiffs_res = xmltodict.parse(f.read())
-        
-        grd_vv = [e for e in self.query_grd_tiffs_res.get('feed').get('entry') if '-vv-' in e.get('title').get('#text')][0]
-        self.grd_vv = grd_vv.get('title').get('#text')
-
-        self.URLs['download_grd_tiff'] = f"https://scihub.copernicus.eu/dhus/odata/v1/Products('{self.grd_shid}')/Nodes('{self.grd_id}.SAFE')/Nodes('measurement')/Nodes('{self.grd_vv}')/$value"
-        self.wgets['download_grd_tiff'] = f'wget --no-check-certificate --user={self.user} --password={self.pwd} --output-document={self.dir}/grd_vv.tiff "{self.URLs["download_grd_tiff"]}"'
+        self.s3 = {
+            "bucket" : f"s3://sentinel-s1-l1c/{sns_msg['path']}/",
+        }
+        if 'VV' in xml_get(self.grd_xml.get('str'), 'polarisationmode'):
+            swath = xml_get(self.grd_xml.get('str'), 'swathidentifier')
+            self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{swath.lower()}-vv.tiff"
+            self.download_strs["download_grd_tiff"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.dir}/vv_grd.tiff --request-payer'
 
     def __repr__(self):
         return f"<SciHubObject: {self.grd_id}>"
 
-    def download_grd(self): return os.system(self.wgets["download_grd"])
-    def download_ocn(self): return os.system(self.wgets["download_ocn"])
-    def download_grd_tiff(self): return os.system(self.wgets["download_grd_tiff"])
+    def download_ocn(self): 
+        if not self.download_strs.get("download_ocn"):
+            print('ERROR No OCN found for this GRD')
+        os.system(self.download_strs.get("download_ocn"))
+    
+    def download_grd_tiff(self): 
+        if not self.download_strs.get("download_grd_tiff"): 
+            print('ERROR No grd tiff found with VV polarization')
+        os.system(self.download_strs.get("download_grd_tiff"))
+
+    def update_intersection(self, ocean_shape):
+        scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
+        self.isoceanic = scene_poly.intersects(ocean_shape)
+        inter = scene_poly.intersection(ocean_shape)
+        self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
 
     def grd_db_row(self):
-        grd = [e for e in self.query_prods_res.get('feed').get('entry') if 'GRD' in e.get('title')][0]
         res = {
             "GRD_scihub_uuid" : self.grd_shid,
             "GRD_scihub_identifier" : self.grd_id,
-            "summary" : grd.get('summary'),
-            "beginposition" : str_to_dt(xml_get(grd.get('date'),'beginposition')),
-            "endposition" : str_to_dt(xml_get(grd.get('date'), 'endposition')),
-            "ingestiondate" : str_to_dt(xml_get(grd.get('date'), 'ingestiondate')),
-            "missiondatatakeid" : int(xml_get(grd.get('int'), 'missiondatatakeid')),
-            "orbitnumber" : int(xml_get(grd.get('int'), 'orbitnumber')),
-            "lastorbitnumber" : int(xml_get(grd.get('int'), 'lastorbitnumber')),
-            "relativeorbitnumber" : int(xml_get(grd.get('int'), 'relativeorbitnumber')),
-            "lastrelativeorbitnumber" : int(xml_get(grd.get('int'), 'lastrelativeorbitnumber')),
-            "sensoroperationalmode" : xml_get(grd.get('str'), 'sensoroperationalmode'),
-            "swathidentifier" : xml_get(grd.get('str'), 'swathidentifier'),
-            "orbitdirection" : xml_get(grd.get('str'), 'orbitdirection'),
-            "producttype" : xml_get(grd.get('str'), 'producttype'),
-            "timeliness" : xml_get(grd.get('str'), 'timeliness'),
-            "platformname" : xml_get(grd.get('str'), 'platformname'),
-            "platformidentifier" : xml_get(grd.get('str'), 'platformidentifier'),
-            "instrumentname" : xml_get(grd.get('str'), 'instrumentname'),
-            "instrumentshortname" : xml_get(grd.get('str'), 'instrumentshortname'),
-            "filename" : xml_get(grd.get('str'), 'filename'),
-            "format" : xml_get(grd.get('str'), 'format'),
-            "productclass" : xml_get(grd.get('str'), 'productclass'),
-            "polarisationmode" : xml_get(grd.get('str'), 'polarisationmode'),
-            "acquisitiontype" : xml_get(grd.get('str'), 'acquisitiontype'),
-            "status" : xml_get(grd.get('str'), 'status'),
-            "size" : xml_get(grd.get('str'), 'size'),
-            "footprint" : xml_get(grd.get('str'), 'footprint'),
+            "summary" : self.grd_xml.get('summary'),
+            "beginposition" : str_to_dt(xml_get(self.grd_xml.get('date'),'beginposition')),
+            "endposition" : str_to_dt(xml_get(self.grd_xml.get('date'), 'endposition')),
+            "ingestiondate" : str_to_dt(xml_get(self.grd_xml.get('date'), 'ingestiondate')),
+            "missiondatatakeid" : int(xml_get(self.grd_xml.get('int'), 'missiondatatakeid')),
+            "orbitnumber" : int(xml_get(self.grd_xml.get('int'), 'orbitnumber')),
+            "lastorbitnumber" : int(xml_get(self.grd_xml.get('int'), 'lastorbitnumber')),
+            "relativeorbitnumber" : int(xml_get(self.grd_xml.get('int'), 'relativeorbitnumber')),
+            "lastrelativeorbitnumber" : int(xml_get(self.grd_xml.get('int'), 'lastrelativeorbitnumber')),
+            "sensoroperationalmode" : xml_get(self.grd_xml.get('str'), 'sensoroperationalmode'),
+            "swathidentifier" : xml_get(self.grd_xml.get('str'), 'swathidentifier'),
+            "orbitdirection" : xml_get(self.grd_xml.get('str'), 'orbitdirection'),
+            "producttype" : xml_get(self.grd_xml.get('str'), 'producttype'),
+            "timeliness" : xml_get(self.grd_xml.get('str'), 'timeliness'),
+            "platformname" : xml_get(self.grd_xml.get('str'), 'platformname'),
+            "platformidentifier" : xml_get(self.grd_xml.get('str'), 'platformidentifier'),
+            "instrumentname" : xml_get(self.grd_xml.get('str'), 'instrumentname'),
+            "instrumentshortname" : xml_get(self.grd_xml.get('str'), 'instrumentshortname'),
+            "filename" : xml_get(self.grd_xml.get('str'), 'filename'),
+            "format" : xml_get(self.grd_xml.get('str'), 'format'),
+            "productclass" : xml_get(self.grd_xml.get('str'), 'productclass'),
+            "polarisationmode" : xml_get(self.grd_xml.get('str'), 'polarisationmode'),
+            "acquisitiontype" : xml_get(self.grd_xml.get('str'), 'acquisitiontype'),
+            "status" : xml_get(self.grd_xml.get('str'), 'status'),
+            "size" : xml_get(self.grd_xml.get('str'), 'size'),
+            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "isoceanic" : self.isoceanic,
-            "oceanintersection" : self.oceanintersection, 
-            "timestamp" : str_to_dt(xml_get(grd.get('date'),'beginposition')).timestamp(),
+            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else "",
+            "timestamp" : str_to_dt(xml_get(self.grd_xml.get('date'),'beginposition')).timestamp(),
         }
         return res
 
     def ocn_db_row(self):
-        ocn = [e for e in self.query_prods_res.get('feed').get('entry') if 'OCN' in e.get('title')][0]
         res = {
             "OCN_scihub_uuid" : self.ocn_shid,
             "OCN_scihub_identifier" : self.ocn_id,
-            "producttype" : xml_get(ocn.get('str'), 'producttype'),
-            "filename" : xml_get(ocn.get('str'), 'filename'),
-            "size" : xml_get(ocn.get('str'), 'size'),
+            "producttype" : xml_get(self.ocn_xml.get('str'), 'producttype'),
+            "filename" : xml_get(self.ocn_xml.get('str'), 'filename'),
+            "size" : xml_get(self.ocn_xml.get('str'), 'size'),
             "GRD_scihub_uuid" : self.grd_shid,
         }
         return res
     
     def cleanup(self):
         os.system(f'rm -f -r {self.dir}')
-        return True
 
 def xml_get(lst, a, key1="@name", key2="#text"):
     # from a lst of dcts, find the dct that has key value pair (@name:a), then retrieve the value of (#text:?)
+    if lst == None: return None # This is a hack for the case where there is no OCN product. TODO handle absent OCN higher up
     for dct in lst:
         if dct.get(key1) == a:
             return dct.get(key2)
     return None
 
 def str_to_dt(s): return datetime.strptime(s[:-1], '%Y-%m-%dT%H:%M:%S.%f')
-
-a = Sho("S1B_IW_GRDH_1SDV_20200402T003114_20200402T003139_020958_027C13_47BB")
-a
-# %%
-a.download_grd_tiff()
-
-# %%
