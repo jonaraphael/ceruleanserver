@@ -12,4 +12,3 @@ class Config:
 
     sh_user = 'jonaraph' if not hasattr(Local_Config, 'sh_user') else Local_Config.sh_user
     sh_pwd = 'fjjEwvMDHyJH9Fa' if not hasattr(Local_Config, 'sh_pwd') else Local_Config.sh_pwd
-print(Config.__dict__)
