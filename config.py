@@ -1,14 +1,19 @@
-from local_config import Local_Config
-class Config:
-    app_host = '0.0.0.0' if not hasattr(Local_Config, 'app_host') else Local_Config.app_host
-    app_port = 80 if not hasattr(Local_Config, 'app_port') else Local_Config.app_port
-    app_debug = True if not hasattr(Local_Config, 'app_debug') else Local_Config.app_debug
-    
-    db_host = 'slick-db.cboaxrzskot9.eu-central-1.rds.amazonaws.com' if not hasattr(Local_Config, 'db_host') else Local_Config.db_host
-    db_user = 'postgres' if not hasattr(Local_Config, 'db_user') else Local_Config.db_user
-    db_password = 'postgres' if not hasattr(Local_Config, 'db_password') else Local_Config.db_password
-    db_database = 'slick_db' if not hasattr(Local_Config, 'db_database') else Local_Config.db_database
-    db_port = '5432' if not hasattr(Local_Config, 'db_port') else Local_Config.db_port
+import importlib
 
-    sh_user = 'jonaraph' if not hasattr(Local_Config, 'sh_user') else Local_Config.sh_user
-    sh_pwd = 'fjjEwvMDHyJH9Fa' if not hasattr(Local_Config, 'sh_pwd') else Local_Config.sh_pwd
+APP_HOST = '0.0.0.0'
+APP_PORT = 80
+DEBUG = True
+    
+DB_HOST = 'slick-db.cboaxrzskot9.eu-central-1.rds.amazonaws.com' 
+DB_USER = 'postgres'
+DB_PASSWORD = 'postgres' 
+DB_DATABASE = 'slick_db' 
+DB_PORT = '5432' 
+
+SH_USER = 'jonaraph' 
+SH_PWD = 'fjjEwvMDHyJH9Fa'
+
+# override with values from a loca file only if it exists
+if importlib.util.find_spec('local_config') is not None:
+    from  local_config import *
+

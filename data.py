@@ -1,8 +1,9 @@
 import psycopg2
-from config import Config
+import config
 
 class DBConnection:
-    def __init__(self, host=Config.db_host, user=Config.db_user, password=Config.db_password, database=Config.db_database, port=Config.db_port):
+    def __init__(self, host=config.DB_HOST, user=config.DB_USER, password=config.DB_PASSWORD, 
+        database=config.DB_DATABASE, port=config.DB_PORT):
         self.conn = psycopg2.connect(host=host, user=user, password=password, database=database, port=port)
         self.conn.set_session(autocommit=True)
         
