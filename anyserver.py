@@ -12,9 +12,10 @@ app = Flask(__name__)
 def process_sns(sns):
     sho = SHO(json.loads(sns['Message']))
     sho.update_intersection(ocean_shape)
-    sho.cleanup()
+    print(sho.ready)
     # add to database
     # if oceanic, machine learn
+    sho.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])
@@ -35,6 +36,7 @@ def home():
     
     if mess_type == 'SubscriptionConfirmation':
         # "UnsubscribeUrl": "https://sns.eu-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-central-1:214830741341:SentinelS1L1C:a07f782a-5c86-4e96-906d-9347e056b8bc"        r = requests.get(sns.get("SubscribeURL"))
+        r = requests.get(sns.get("SubscribeURL"))
         if r.status_code > 200 and r.status_code < 300:
             res = {
                 "msg": "Subscribed successfully", 
