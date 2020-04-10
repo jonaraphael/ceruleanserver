@@ -3,7 +3,7 @@ import json
 import requests
 import shapely.geometry as sh
 from data import DBConnection
-from config import Config
+import config
 from SciHub_class import SHO
 
 # Create app
@@ -66,4 +66,4 @@ if __name__ == "__main__":
         ocean_features = json.load(f)["features"]
     ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
 
-    app.run(Config.app_host, Config.app_port, Config.app_debug)
+    app.run(config.APP_HOST, config.APP_PORT, config.DEBUG)

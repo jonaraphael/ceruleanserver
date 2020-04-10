@@ -2,12 +2,12 @@ import os
 import xmltodict
 from datetime import datetime
 import shapely.geometry as sh
+import config
 import json
-from config import Config
 import requests
 
 class SHO:
-    def __init__(self, sns_msg, user=Config.sh_user, pwd=Config.sh_pwd):
+    def __init__(self, sns_msg, user=config.SH_USER, pwd=config.SH_PWD):
         self.sns_msg = sns_msg
         self.user = user
         self.pwd = pwd
