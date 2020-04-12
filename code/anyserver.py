@@ -62,7 +62,7 @@ def home():
 if __name__ == "__main__":    
     db = DBConnection()
 
-    with open("OceanGeoJSON_lowres.geojson") as f:
+    with open("../OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
     ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
 
