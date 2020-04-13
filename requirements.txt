@@ -1,0 +1,4 @@
+flask
+xmltodict
+shapely
+psycopg2-binary
