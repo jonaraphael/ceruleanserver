@@ -12,9 +12,11 @@ app = Flask(__name__)
 def process_sns(sns):
     sho = SHO(json.loads(sns['Message']))
     sho.update_intersection(ocean_shape)
-    print(sho.ready)
     # add to database
-    # if oceanic, machine learn
+    # if ready, machine learn
+    print(json.dumps(sho.grd_db_row(),indent=4))
+    print(json.dumps(sho.ocn_db_row(), indent=4))
+    print(sho.machinable)
     sho.cleanup()
 
 # Home page
@@ -62,7 +64,7 @@ def home():
 if __name__ == "__main__":    
     db = DBConnection()
 
-    with open("../OceanGeoJSON_lowres.geojson") as f:
+    with open("OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
     ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
 
