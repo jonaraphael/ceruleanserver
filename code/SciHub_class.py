@@ -7,35 +7,28 @@ import json
 import requests
 
 class SHO:
-    def __init__(self, sns_msg, user=config.SH_USER, pwd=config.SH_PWD):
+    def __init__(self, sns, user=config.SH_USER, pwd=config.SH_PWD):
         # From SNS
-        self.sns_msg = sns_msg
-        self.grd_id = sns_msg["id"]
-        self.grd_shid = sns_msg['sciHubId']
-        self.orbitnumber = sns_msg['absoluteOrbitNumber']
-        self.footprint = sns_msg['footprint']
-        self.missiondatatakeid = sns_msg['missionDataTakeId']
-        self.sensoroperationalmode = sns_msg['mode']
-        self.polarisationmode = sns_msg['polarization']
-        self.s3Ingestion = sns_msg['s3Ingestion']
-        self.ingestiondate = sns_msg['sciHubIngestion']
-        self.beginposition = sns_msg['startTime']
-        self.endposition = sns_msg['stopTime']
+        self.sns = sns
+        self.sns_msg = json.loads(sns['Message'])
+        self.grd_id = self.sns_msg["id"]
         
         # Calculated
         self.dir = self.grd_id
-        self.isvv = 'V' in self.polarisationmode
+        self.isvv = 'V' in self.sns_msg['polarization']
         self.generic_id = self.grd_id[:7]+"????_?"+self.grd_id[13:-4]+"*"
         self.URLs = {"query_prods" : f"https://{user}:{pwd}@scihub.copernicus.eu/apihub/search?rows=100&q=(platformname:Sentinel-1 AND filename:{self.generic_id})",}
-        self.s3 = {"bucket" : f"s3://sentinel-s1-l1c/{sns_msg['path']}/",}
+        self.s3 = {"bucket" : f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/",}
 
         # Placeholders
+        self.grd = {}
+        self.ocn = {}
         self.isoceanic = None
         self.oceanintersection = None
         self.machinable = None
 
         if self.isvv: # we don't want to process any polarization other than vv
-            self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sensoroperationalmode.lower()}-vv.tiff"
+            self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
             self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.dir}/vv_grd.tiff --request-payer'
         
         with requests.Session() as s:
@@ -52,9 +45,9 @@ class SHO:
             prods = self.query_prods_res.get('feed').get('entry')
             if isinstance(prods, dict): prods = [prods] # If there's only one product, xmlparser returns a dict instead of a list of dicts
             for p in prods:
-                self.grd = p if 'GRD' in p.get('title') else None  # This is XML
-                self.ocn = p if 'OCN' in p.get('title') else None  # This is XML
-
+                self.grd = p if 'GRD' in p.get('title') else self.grd  # This is XML
+                self.ocn = p if 'OCN' in p.get('title') else self.ocn  # This is XML
+            
             if self.ocn:
                 self.ocn_id = self.ocn.get('title')
                 self.ocn_shid = self.ocn.get('id')
@@ -88,56 +81,79 @@ class SHO:
         self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
         self.machinable = self.isoceanic and self.isvv
 
-    def grd_db_row(self):
-        res = {
-            "GRD_scihub_uuid" : self.grd_shid,
-            "GRD_scihub_identifier" : self.grd_id,
-            "summary" : self.grd.get('summary'),
-            "orbitnumber" : self.orbitnumber,
-            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.footprint)}')",
-            "missiondatatakeid" : self.missiondatatakeid,
-            "sensoroperationalmode" : self.sensoroperationalmode,
-            "polarisationmode" : self.polarisationmode,
-            "s3Ingestion" : self.s3Ingestion,
-            "ingestiondate" : self.ingestiondate,
-            "beginposition" : self.beginposition,
-            "endposition" : self.endposition,
-            "isoceanic" : self.isoceanic,
-            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else "",
-            "timestamp" : str_to_dt(self.beginposition).timestamp(),
+    def sns_db_row(self):
+        tbl = 'sns'
+        row = {
+            "SNS_MessageId" : f"'{self.sns['MessageId']}'", # Primary Key
+            "SNS_Subject" : f"'{self.sns['Subject']}'",
+            "SNS_Timestamp" : f"{str_to_ts(self.sns['Timestamp'])}",
+            "GRD_id" : f"'{self.sns_msg['id']}'",
+            "GRD_sciHubId" : f"'{self.sns_msg['sciHubId']}'", # Unique Constraint
+            "absoluteOrbitNumber" : f"{self.sns_msg['absoluteOrbitNumber']}",
+            "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
+            "mode" : f"'{self.sns_msg['mode']}'",
+            "polarization" : f"'{self.sns_msg['polarization']}'",
+            "s3Ingestion" : f"{str_to_ts(self.sns_msg['s3Ingestion'])}",
+            "sciHubIngestion" : f"{str_to_ts(self.sns_msg['sciHubIngestion'])}",
+            "startTime" : f"{str_to_ts(self.sns_msg['startTime'])}",
+            "stopTime" : f"{str_to_ts(self.sns_msg['stopTime'])}",
+            "onscihub" : f"{self.onscihub}",
+            "isoceanic" : f"{self.isoceanic}",
+            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else 'null',
         }
-        if self.grd:
-            res.update({
-                "swathidentifier" : xml_get(self.grd.get('str'), 'swathidentifier'),
-                "orbitdirection" : xml_get(self.grd.get('str'), 'orbitdirection'),
-                "producttype" : xml_get(self.grd.get('str'), 'producttype'),
-                "timeliness" : xml_get(self.grd.get('str'), 'timeliness'),
-                "platformname" : xml_get(self.grd.get('str'), 'platformname'),
-                "platformidentifier" : xml_get(self.grd.get('str'), 'platformidentifier'),
-                "instrumentname" : xml_get(self.grd.get('str'), 'instrumentname'),
-                "instrumentshortname" : xml_get(self.grd.get('str'), 'instrumentshortname'),
-                "filename" : xml_get(self.grd.get('str'), 'filename'),
-                "format" : xml_get(self.grd.get('str'), 'format'),
-                "productclass" : xml_get(self.grd.get('str'), 'productclass'),
-                "acquisitiontype" : xml_get(self.grd.get('str'), 'acquisitiontype'),
-                "status" : xml_get(self.grd.get('str'), 'status'),
-                "size" : xml_get(self.grd.get('str'), 'size'),
+        return (row, tbl)
+
+    def grd_db_row(self):
+        tbl = 'shgrd'
+        row = {}
+        if self.grd: # SciHub has additional information
+            row.update({
+                "SNS_GRD_id" : f"'{self.grd_id}'", # Foreign Key
+                "summary" : f"'{self.grd.get('summary')}'",
+                "beginposition" : f"{str_to_ts(xml_get(self.grd.get('date'),'beginposition'))}",
+                "endposition" : f"{str_to_ts(xml_get(self.grd.get('date'), 'endposition'))}",
+                "ingestiondate" : f"{str_to_ts(xml_get(self.grd.get('date'), 'ingestiondate'))}",
+                "missiondatatakeid" : f"{int(xml_get(self.grd.get('int'), 'missiondatatakeid'))}",
+                "orbitnumber" : f"{int(xml_get(self.grd.get('int'), 'orbitnumber'))}",
+                "lastorbitnumber" : f"{int(xml_get(self.grd.get('int'), 'lastorbitnumber'))}",
+                "relativeorbitnumber" : f"{int(xml_get(self.grd.get('int'), 'relativeorbitnumber'))}",
+                "lastrelativeorbitnumber" : f"{int(xml_get(self.grd.get('int'), 'lastrelativeorbitnumber'))}",
+                "sensoroperationalmode" : f"'{xml_get(self.grd.get('str'), 'sensoroperationalmode')}'",
+                "swathidentifier" : f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'",
+                "orbitdirection" : f"'{xml_get(self.grd.get('str'), 'orbitdirection')}'",
+                "producttype" : f"'{xml_get(self.grd.get('str'), 'producttype')}'",
+                "timeliness" : f"'{xml_get(self.grd.get('str'), 'timeliness')}'",
+                "platformname" : f"'{xml_get(self.grd.get('str'), 'platformname')}'",
+                "platformidentifier" : f"'{xml_get(self.grd.get('str'), 'platformidentifier')}'",
+                "instrumentname" : f"'{xml_get(self.grd.get('str'), 'instrumentname')}'",
+                "instrumentshortname" : f"'{xml_get(self.grd.get('str'), 'instrumentshortname')}'",
+                "filename" : f"'{xml_get(self.grd.get('str'), 'filename')}'",
+                "format" : f"'{xml_get(self.grd.get('str'), 'format')}'",
+                "productclass" : f"'{xml_get(self.grd.get('str'), 'productclass')}'",
+                "polarisationmode" : f"'{xml_get(self.grd.get('str'), 'polarisationmode')}'",
+                "acquisitiontype" : f"'{xml_get(self.grd.get('str'), 'acquisitiontype')}'",
+                "status" : f"'{xml_get(self.grd.get('str'), 'status')}'",
+                "size" : f"'{xml_get(self.grd.get('str'), 'size')}'",
+                "footprint" : f"'{xml_get(self.grd.get('str'), 'footprint')}'",
+                "identifier" : f"'{xml_get(self.grd.get('str'), 'identifier')}'",
+                "uuid" : f"'{xml_get(self.grd.get('str'), 'uuid')}'",
             })
-        return res
+        return (row, tbl)
 
     def ocn_db_row(self):
-        res = {}
+        tbl = 'shocn'
+        row = {}
         if self.ocn:
-            res.update({
-                "OCN_scihub_uuid" : self.ocn_shid,
-                "OCN_scihub_identifier" : self.ocn_id,
-                "summary" : self.ocn.get('summary'),
-                "producttype" : xml_get(self.ocn.get('str'), 'producttype'),
-                "filename" : xml_get(self.ocn.get('str'), 'filename'),
-                "size" : xml_get(self.ocn.get('str'), 'size'),
-                "GRD_scihub_uuid" : self.grd_shid,
+            row.update({
+                "SNS_GRD_id" : f"'{self.grd_id}'", # Foreign Key
+                "uuid" : f"'{self.ocn_shid}'",
+                "identifier" : f"'{self.ocn_id}'",
+                "summary" : f"'{self.ocn.get('summary')}'",
+                "producttype" : f"'{xml_get(self.ocn.get('str'), 'producttype')}'",
+                "filename" : f"'{xml_get(self.ocn.get('str'), 'filename')}'",
+                "size" : f"'{xml_get(self.ocn.get('str'), 'size')}'",
             })
-        return res
+        return (row, tbl)
 
     def cleanup(self):
         os.system(f'rm -f -r {self.dir}')
@@ -150,9 +166,12 @@ def xml_get(lst, a, key1="@name", key2="#text"):
             return dct.get(key2)
     return None
 
-def str_to_dt(s):
+def str_to_ts(s):
     if 'Z' in s:
-        fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
+        if '.' in s:
+            fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
+        else:
+            fmt = '%Y-%m-%dT%H:%M:%SZ'
     else:
         fmt = '%Y-%m-%dT%H:%M:%S'
-    return datetime.strptime(s, fmt)
+    return datetime.strptime(s, fmt).timestamp()

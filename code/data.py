@@ -6,21 +6,17 @@ class DBConnection:
         database=config.DB_DATABASE, port=config.DB_PORT):
         self.conn = psycopg2.connect(host=host, user=user, password=password, database=database, port=port)
         self.conn.set_session(autocommit=True)
-        
-    def insert_into_image_table(self, sns_msg, oceanic):
+    
+    def insert_dict_as_row(self, dct, tbl):
+        keys, values = zip(*dct.items())        
         cur = self.conn.cursor()
         cmd = f"""
-            INSERT INTO public."IMAGE"
-            VALUES(
-                '{sns_msg["id"]}',
-                '{sns_msg["startTime"].replace("T", " ")}',
-                '{oceanic}',
-                ST_GeomFromGeoJSON('{json.dumps(sns_msg["footprint"])}'),
-                '{sns_msg["polarization"]}',
-                '{sns_msg["mode"]}',
-                '{sns_msg["path"]}'
-            )
+            INSERT INTO public."{tbl}"("{'", "'.join(keys)}")
+            VALUES({', '.join([str(v) for v in values])})
         """
-        cur.execute(cmd)
+        # print(cmd)
+        try:
+            cur.execute(cmd)
+        except psycopg2.errors.UniqueViolation as e:
+            print('ERROR:', e)
         cur.close()
-
