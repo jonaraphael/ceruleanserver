@@ -86,17 +86,17 @@ class SHO:
         row = {
             "SNS_MessageId" : f"'{self.sns['MessageId']}'", # Primary Key
             "SNS_Subject" : f"'{self.sns['Subject']}'",
-            "SNS_Timestamp" : f"{str_to_dt(self.sns['Timestamp'])}",
+            "SNS_Timestamp" : f"{str_to_ts(self.sns['Timestamp'])}",
             "GRD_id" : f"'{self.sns_msg['id']}'",
             "GRD_sciHubId" : f"'{self.sns_msg['sciHubId']}'", # Unique Constraint
             "absoluteOrbitNumber" : f"{self.sns_msg['absoluteOrbitNumber']}",
             "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "mode" : f"'{self.sns_msg['mode']}'",
             "polarization" : f"'{self.sns_msg['polarization']}'",
-            "s3Ingestion" : f"{str_to_dt(self.sns_msg['s3Ingestion'])}",
-            "sciHubIngestion" : f"{str_to_dt(self.sns_msg['sciHubIngestion'])}",
-            "startTime" : f"{str_to_dt(self.sns_msg['startTime'])}",
-            "stopTime" : f"{str_to_dt(self.sns_msg['stopTime'])}",
+            "s3Ingestion" : f"{str_to_ts(self.sns_msg['s3Ingestion'])}",
+            "sciHubIngestion" : f"{str_to_ts(self.sns_msg['sciHubIngestion'])}",
+            "startTime" : f"{str_to_ts(self.sns_msg['startTime'])}",
+            "stopTime" : f"{str_to_ts(self.sns_msg['stopTime'])}",
             "onscihub" : f"{self.onscihub}",
             "isoceanic" : f"{self.isoceanic}",
             "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else 'null',
@@ -110,9 +110,9 @@ class SHO:
             row.update({
                 "SNS_GRD_id" : f"'{self.grd_id}'", # Foreign Key
                 "summary" : f"'{self.grd.get('summary')}'",
-                "beginposition" : f"{str_to_dt(xml_get(self.grd.get('date'),'beginposition'))}",
-                "endposition" : f"{str_to_dt(xml_get(self.grd.get('date'), 'endposition'))}",
-                "ingestiondate" : f"{str_to_dt(xml_get(self.grd.get('date'), 'ingestiondate'))}",
+                "beginposition" : f"{str_to_ts(xml_get(self.grd.get('date'),'beginposition'))}",
+                "endposition" : f"{str_to_ts(xml_get(self.grd.get('date'), 'endposition'))}",
+                "ingestiondate" : f"{str_to_ts(xml_get(self.grd.get('date'), 'ingestiondate'))}",
                 "missiondatatakeid" : f"{int(xml_get(self.grd.get('int'), 'missiondatatakeid'))}",
                 "orbitnumber" : f"{int(xml_get(self.grd.get('int'), 'orbitnumber'))}",
                 "lastorbitnumber" : f"{int(xml_get(self.grd.get('int'), 'lastorbitnumber'))}",
@@ -166,9 +166,12 @@ def xml_get(lst, a, key1="@name", key2="#text"):
             return dct.get(key2)
     return None
 
-def str_to_dt(s):
+def str_to_ts(s):
     if 'Z' in s:
-        fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
+        if '.' in s:
+            fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
+        else:
+            fmt = '%Y-%m-%dT%H:%M:%SZ'
     else:
         fmt = '%Y-%m-%dT%H:%M:%S'
     return datetime.strptime(s, fmt).timestamp()
