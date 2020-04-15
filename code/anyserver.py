@@ -12,11 +12,10 @@ app = Flask(__name__)
 def process_sns(sns):
     sho = SHO(sns)
     sho.update_intersection(ocean_shape)
-    # add to database
+    db.insert_dict_as_row(*sho.sns_db_row())
+    if sho.grd: db.insert_dict_as_row(*sho.grd_db_row())
+    if sho.ocn: db.insert_dict_as_row(*sho.ocn_db_row())
     # if machinable: learn
-    print("SNS GRD   ",sho.sns_db_row().get('GRD_id'))
-    print("scihub GRD",sho.grd_db_row().get('identifier'))
-    print("scihub OCN", sho.ocn_db_row().get('OCN_scihub_identifier'))
     print("machinable", sho.machinable)
     sho.cleanup()
 

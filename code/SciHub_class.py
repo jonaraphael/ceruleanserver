@@ -82,12 +82,13 @@ class SHO:
         self.machinable = self.isoceanic and self.isvv
 
     def sns_db_row(self):
-        res = {
-            "SNS_MessageId" : f"'{self.sns['MessageId']}'",
+        tbl = 'sns'
+        row = {
+            "SNS_MessageId" : f"'{self.sns['MessageId']}'", # Primary Key
             "SNS_Subject" : f"'{self.sns['Subject']}'",
             "SNS_Timestamp" : f"{str_to_dt(self.sns['Timestamp'])}",
             "GRD_id" : f"'{self.sns_msg['id']}'",
-            "GRD_sciHubId" : f"'{self.sns_msg['sciHubId']}'",
+            "GRD_sciHubId" : f"'{self.sns_msg['sciHubId']}'", # Unique Constraint
             "absoluteOrbitNumber" : f"{self.sns_msg['absoluteOrbitNumber']}",
             "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "mode" : f"'{self.sns_msg['mode']}'",
@@ -98,14 +99,15 @@ class SHO:
             "stopTime" : f"{str_to_dt(self.sns_msg['stopTime'])}",
             "onscihub" : f"{self.onscihub}",
             "isoceanic" : f"{self.isoceanic}",
-            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else None,
+            "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else 'null',
         }
-        return res
+        return (row, tbl)
 
     def grd_db_row(self):
-        res = {}
+        tbl = 'shgrd'
+        row = {}
         if self.grd: # SciHub has additional information
-            res.update({
+            row.update({
                 "SNS_GRD_id" : f"'{self.grd_id}'", # Foreign Key
                 "summary" : f"'{self.grd.get('summary')}'",
                 "beginposition" : f"{str_to_dt(xml_get(self.grd.get('date'),'beginposition'))}",
@@ -136,21 +138,22 @@ class SHO:
                 "identifier" : f"'{xml_get(self.grd.get('str'), 'identifier')}'",
                 "uuid" : f"'{xml_get(self.grd.get('str'), 'uuid')}'",
             })
-        return res
+        return (row, tbl)
 
     def ocn_db_row(self):
-        res = {}
+        tbl = 'shocn'
+        row = {}
         if self.ocn:
-            res.update({
+            row.update({
                 "SNS_GRD_id" : f"'{self.grd_id}'", # Foreign Key
-                "OCN_scihub_uuid" : f"'{self.ocn_shid}'",
-                "OCN_scihub_identifier" : f"'{self.ocn_id}'",
+                "uuid" : f"'{self.ocn_shid}'",
+                "identifier" : f"'{self.ocn_id}'",
                 "summary" : f"'{self.ocn.get('summary')}'",
                 "producttype" : f"'{xml_get(self.ocn.get('str'), 'producttype')}'",
                 "filename" : f"'{xml_get(self.ocn.get('str'), 'filename')}'",
                 "size" : f"'{xml_get(self.ocn.get('str'), 'size')}'",
             })
-        return res
+        return (row, tbl)
 
     def cleanup(self):
         os.system(f'rm -f -r {self.dir}')

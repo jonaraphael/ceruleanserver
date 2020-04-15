@@ -11,8 +11,12 @@ class DBConnection:
         keys, values = zip(*dct.items())        
         cur = self.conn.cursor()
         cmd = f"""
-            INSERT INTO public."{tbl}"({', '.join(keys)})
+            INSERT INTO public."{tbl}"("{'", "'.join(keys)}")
             VALUES({', '.join([str(v) for v in values])})
         """
-        cur.execute(cmd)
+        # print(cmd)
+        try:
+            cur.execute(cmd)
+        except psycopg2.errors.UniqueViolation as e:
+            print('ERROR:', e)
         cur.close()
