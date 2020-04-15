@@ -45,8 +45,8 @@ class SHO:
             prods = self.query_prods_res.get('feed').get('entry')
             if isinstance(prods, dict): prods = [prods] # If there's only one product, xmlparser returns a dict instead of a list of dicts
             for p in prods:
-                self.grd = p if 'GRD' in p.get('title') else None  # This is XML
-                self.ocn = p if 'OCN' in p.get('title') else None  # This is XML
+                self.grd = p if 'GRD' in p.get('title') else self.grd  # This is XML
+                self.ocn = p if 'OCN' in p.get('title') else self.ocn  # This is XML
             
             if self.ocn:
                 self.ocn_id = self.ocn.get('title')
