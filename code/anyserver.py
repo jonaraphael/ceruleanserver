@@ -10,13 +10,14 @@ from SciHub_class import SHO
 app = Flask(__name__)
 
 def process_sns(sns):
-    sho = SHO(json.loads(sns['Message']))
+    sho = SHO(sns)
     sho.update_intersection(ocean_shape)
     # add to database
-    # if ready, machine learn
-    print(json.dumps(sho.grd_db_row(),indent=4))
-    print(json.dumps(sho.ocn_db_row(), indent=4))
-    print(sho.machinable)
+    # if machinable: learn
+    print("SNS GRD   ",sho.sns_db_row().get('GRD_id'))
+    print("scihub GRD",sho.grd_db_row().get('identifier'))
+    print("scihub OCN", sho.ocn_db_row().get('OCN_scihub_identifier'))
+    print("machinable", sho.machinable)
     sho.cleanup()
 
 # Home page
