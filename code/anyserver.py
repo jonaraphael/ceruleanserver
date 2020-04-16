@@ -20,8 +20,9 @@ def process_sns(sns):
     print("shgrd", sho.grd_db_row()[0].get("identifier"))
     print("shocn", sho.ocn_db_row()[0].get("identifier"))
     print("machinable", snso.machinable)
-    snso.cleanup()
-    sho.cleanup()
+    snso.generate_png()
+    # snso.cleanup()
+    # sho.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])

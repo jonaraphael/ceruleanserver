@@ -14,7 +14,8 @@ DB_ACCESS = False # Override in local_config if you want to hit the real DB
 SH_USER = 'jonaraph' 
 SH_PWD = 'fjjEwvMDHyJH9Fa'
 
+ML_PKL = ''
+
 # override with values from a local file, only if it exists
 if importlib.util.find_spec('local_config') is not None:
-    from  local_config import *
-
+    from  local_config import * # pylint: disable=unused-wildcard-import
