@@ -4,7 +4,7 @@ import requests
 import shapely.geometry as sh
 from data import DBConnection
 import config
-from SciHub_class import SHO, SNSO
+from classes import SHO, SNSO
 
 # Create app
 app = Flask(__name__)
