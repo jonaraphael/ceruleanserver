@@ -4,19 +4,23 @@ import requests
 import shapely.geometry as sh
 from data import DBConnection
 import config
-from SciHub_class import SHO
+from classes import SHO, SNSO
 
 # Create app
 app = Flask(__name__)
 
 def process_sns(sns):
-    sho = SHO(sns)
-    sho.update_intersection(ocean_shape)
-    db.insert_dict_as_row(*sho.sns_db_row())
+    snso = SNSO(sns)
+    snso.update_intersection(ocean_shape)
+    db.insert_dict_as_row(*snso.sns_db_row())
+    sho = SHO(snso.prod_id)
     if sho.grd: db.insert_dict_as_row(*sho.grd_db_row())
     if sho.ocn: db.insert_dict_as_row(*sho.ocn_db_row())
     # if machinable: learn
-    print("machinable", sho.machinable)
+    print("shgrd", sho.grd_db_row()[0].get("identifier"))
+    print("shocn", sho.ocn_db_row()[0].get("identifier"))
+    print("machinable", snso.machinable)
+    snso.cleanup()
     sho.cleanup()
 
 # Home page
@@ -61,7 +65,7 @@ def home():
     
     return make_response(jsonify(res), res["status_code"])
 
-if __name__ == "__main__":    
+if __name__ in ["__main__", "anyserver"]: # Adding "anyserver" means that this section is entered during vs code debug mode
     db = DBConnection()
 
     with open("OceanGeoJSON_lowres.geojson") as f:

@@ -16,7 +16,10 @@ class DBConnection:
         """
         # print(cmd)
         try:
-            cur.execute(cmd)
-        except psycopg2.errors.UniqueViolation as e:
+            if config.DB_ACCESS:
+                cur.execute(cmd)
+            else:
+                print("WARNING: Running on localhost. Would now write to table:", tbl)
+        except psycopg2.errors.UniqueViolation as e: # pylint: disable=no-member
             print('ERROR:', e)
         cur.close()

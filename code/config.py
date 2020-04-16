@@ -9,6 +9,7 @@ DB_USER = 'postgres'
 DB_PASSWORD = 'postgres' 
 DB_DATABASE = 'db_slick' 
 DB_PORT = '5432' 
+DB_ACCESS = False # Override in local_config if you want to hit the real DB
 
 SH_USER = 'jonaraph' 
 SH_PWD = 'fjjEwvMDHyJH9Fa'
