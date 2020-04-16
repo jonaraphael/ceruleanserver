@@ -48,22 +48,22 @@ class SNSO:
         self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
         self.machinable = self.isoceanic and self.isvv
 
-    def sns_db_row(self):
+    def sns_db_row(self): # Warning! PostgreSQL hates capital letters, so the keys are different between the SNS and the DB
         tbl = 'sns'
         row = {
-            "SNS_MessageId" : f"'{self.sns['MessageId']}'", # Primary Key
-            "SNS_Subject" : f"'{self.sns['Subject']}'",
-            "SNS_Timestamp" : f"{str_to_ts(self.sns['Timestamp'])}",
-            "GRD_id" : f"'{self.sns_msg['id']}'",
-            "GRD_sciHubId" : f"'{self.sns_msg['sciHubId']}'", # Unique Constraint
-            "absoluteOrbitNumber" : f"{self.sns_msg['absoluteOrbitNumber']}",
+            "sns_messageid" : f"'{self.sns['MessageId']}'", # Primary Key
+            "sns_subject" : f"'{self.sns['Subject']}'",
+            "sns_timestamp" : f"{str_to_ts(self.sns['Timestamp'])}",
+            "grd_id" : f"'{self.sns_msg['id']}'",
+            "grd_uuid" : f"'{self.sns_msg['sciHubId']}'", # Unique Constraint
+            "absoluteorbitnumber" : f"{self.sns_msg['absoluteOrbitNumber']}",
             "footprint" : f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "mode" : f"'{self.sns_msg['mode']}'",
             "polarization" : f"'{self.sns_msg['polarization']}'",
-            "s3Ingestion" : f"{str_to_ts(self.sns_msg['s3Ingestion'])}",
-            "sciHubIngestion" : f"{str_to_ts(self.sns_msg['sciHubIngestion'])}",
-            "startTime" : f"{str_to_ts(self.sns_msg['startTime'])}",
-            "stopTime" : f"{str_to_ts(self.sns_msg['stopTime'])}",
+            "s3ingestion" : f"{str_to_ts(self.sns_msg['s3Ingestion'])}",
+            "scihubingestion" : f"{str_to_ts(self.sns_msg['sciHubIngestion'])}",
+            "starttime" : f"{str_to_ts(self.sns_msg['startTime'])}",
+            "stoptime" : f"{str_to_ts(self.sns_msg['stopTime'])}",
             "isoceanic" : f"{self.isoceanic}",
             "oceanintersection" : f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')" if self.isoceanic else 'null',
         }
@@ -159,7 +159,7 @@ class SHO:
                 "footprint" : f"'{xml_get(self.grd.get('str'), 'footprint')}'",
                 "identifier" : f"'{self.grd_id}'",
                 "uuid" : f"'{self.grd_shid}'", # Foreign Key
-                "OCN_uuid" : f"'{self.ocn_shid}'" if self.ocn else 'null', # Foreign Key
+                "ocn_uuid" : f"'{self.ocn_shid}'" if self.ocn else 'null', # Foreign Key
             })
         return (row, tbl)
 
@@ -174,7 +174,7 @@ class SHO:
                 "producttype" : f"'{xml_get(self.ocn.get('str'), 'producttype')}'",
                 "filename" : f"'{xml_get(self.ocn.get('str'), 'filename')}'",
                 "size" : f"'{xml_get(self.ocn.get('str'), 'size')}'",
-                "GRD_uuid" : f"'{self.grd_shid}'", # Foreign Key
+                "grd_uuid" : f"'{self.grd_shid}'", # Foreign Key
             })
         return (row, tbl)
 
