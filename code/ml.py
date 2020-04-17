@@ -11,6 +11,8 @@ def machine(snso):
   # Output_chip_size = chip_size*pct/100
   create_chips(snso.s3["grd_tiff_dest"], chip_size, pct)
   # Run inference on chips
+  # Can we save space by deleting the original TIFF?
+  # Can we save space by replacing each PNG with the ML pred output?
 
 def crop_box_gen(num_wide, num_high, chip_size):
   for i in range(num_wide):
