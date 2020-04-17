@@ -25,7 +25,8 @@ class SNSO:
 
         if self.isvv: # we don't want to process any polarization other than vv
             self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
-            self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.dir}/vv_grd.tiff --request-payer'
+            self.s3["grd_tiff_dest"] = f"{self.dir}/vv_grd.tiff"
+            self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
         
     def __repr__(self):
         return f"<SNSObject: {self.sns_msg['id']}>"          
@@ -36,7 +37,8 @@ class SNSO:
         else:
             if not os.path.exists(self.dir):
                 os.mkdir(self.dir)
-            os.system(self.s3["grd_tiff_download_str"])
+            if not os.path.exists(self.s3["grd_tiff_dest"]):
+                os.system(self.s3["grd_tiff_download_str"])
 
     def cleanup(self):
         os.system(f'rm -f -r {self.dir}')
