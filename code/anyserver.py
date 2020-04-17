@@ -17,11 +17,11 @@ def process_sns(sns):
     sho = SHO(snso.prod_id)
     if sho.grd: db.insert_dict_as_row(*sho.grd_db_row())
     if sho.ocn: db.insert_dict_as_row(*sho.ocn_db_row())
-    # if snso.machinable: # This will reduce the volume of images processed by about 60%
-    machine(snso)
     print("shgrd", sho.grd_db_row()[0].get("identifier"))
     print("shocn", sho.ocn_db_row()[0].get("identifier"))
     print("machinable", snso.machinable)
+    # if snso.machinable: # This will reduce the volume of images processed by about 60%
+    # machine(snso) # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
     snso.cleanup()
 
 # Home page
