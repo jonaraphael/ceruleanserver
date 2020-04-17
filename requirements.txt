@@ -1,4 +1,7 @@
 flask
 xmltodict
 shapely
-psycopg2-binary
+psycopg2
+requests
+pandas
+gdal

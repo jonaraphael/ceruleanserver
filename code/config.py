@@ -1,7 +1,7 @@
 import importlib
 
 APP_HOST = '0.0.0.0'
-APP_PORT = 80
+APP_PORT = 5000
 DEBUG = True
     
 DB_HOST = 'db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com' 

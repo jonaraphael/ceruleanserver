@@ -20,9 +20,8 @@ def process_sns(sns):
     print("shgrd", sho.grd_db_row()[0].get("identifier"))
     print("shocn", sho.ocn_db_row()[0].get("identifier"))
     print("machinable", snso.machinable)
-    snso.generate_png()
-    # snso.cleanup()
-    # sho.cleanup()
+    # snso.generate_png()
+    snso.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])
@@ -73,4 +72,4 @@ if __name__ in ["__main__", "anyserver"]: # Adding "anyserver" means that this s
         ocean_features = json.load(f)["features"]
     ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
 
-    app.run(config.APP_HOST, config.APP_PORT, config.DEBUG)
+    app.run(host=config.APP_HOST, debug=config.DEBUG) # port=config.APP_PORT
