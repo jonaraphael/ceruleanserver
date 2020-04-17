@@ -5,7 +5,6 @@ import shapely.geometry as sh
 import config
 import json
 import requests
-from osgeo import gdal
 
 class SNSO:
     def __init__(self, sns):
@@ -50,15 +49,6 @@ class SNSO:
         inter = scene_poly.intersection(ocean_shape)
         self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
         self.machinable = self.isoceanic and self.isvv
-
-    def generate_png(self):
-        import datetime 
-        s = datetime.datetime.now()
-        self.download_grd_tiff()
-        print(datetime.datetime.now()-s)
-        ds = gdal.Open(self.s3["grd_tiff_dest"])
-        ds = gdal.Translate(f'{self.dir}/grd.png', ds, format="PNG", width=100, height=100)
-        del ds
 
     def sns_db_row(self): # Warning! PostgreSQL hates capital letters, so the keys are different between the SNS and the DB
         tbl = 'sns'

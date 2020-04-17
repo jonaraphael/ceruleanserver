@@ -5,6 +5,7 @@ import shapely.geometry as sh
 from data import DBConnection
 import config
 from classes import SHO, SNSO
+from ml import ml_ingest
 
 # Create app
 app = Flask(__name__)
@@ -16,12 +17,12 @@ def process_sns(sns):
     sho = SHO(snso.prod_id)
     if sho.grd: db.insert_dict_as_row(*sho.grd_db_row())
     if sho.ocn: db.insert_dict_as_row(*sho.ocn_db_row())
-    # if machinable: learn
+    # if snso.machinable:
+    ml_ingest(snso)
     print("shgrd", sho.grd_db_row()[0].get("identifier"))
     print("shocn", sho.ocn_db_row()[0].get("identifier"))
     print("machinable", snso.machinable)
-    # snso.generate_png()
-    snso.cleanup()
+    # snso.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])

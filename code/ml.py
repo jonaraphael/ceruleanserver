@@ -1,29 +1,29 @@
-#%%
-import config
 from fastai.vision import Path
-from PIL import Image as PILimage
 from math import ceil
 from os import makedirs
 from datetime import datetime
-from shutil import copyfile, copytree
+from osgeo import gdal
 
-
+def ml_ingest(snso):
+  chip_size = 1000 # px square
+  s = datetime.now()
+  create_chips(snso.s3["grd_tiff_dest"], chip_size)
+  print(datetime.now()-s)
 
 def crop_box_gen(num_wide, num_high, chip_size):
   for i in range(num_wide):
     for j in range(num_high):
-      yield (j*chip_size, i*chip_size, (j+1)*chip_size, (i+1)*chip_size)
+      yield [j*chip_size, i*chip_size, (j+1)*chip_size, (i+1)*chip_size]
 
 def create_chips(img_path, chip_size, out_path=None):
-  chip_path = out_path or img_path.parent/f'{chip_size}_chips'
+  img_path = Path(img_path)
+  chip_path = Path(out_path) if out_path else img_path.parent/f'{chip_size}_chips'
   makedirs(chip_path, exist_ok=True)
-  with PILimage.open(img_path) as img:
-    num_wide = ceil(img.width/chip_size)
-    num_high = ceil(img.height/chip_size)
-    boxes = crop_box_gen(num_wide, num_high, chip_size)
-    for i, b in enumerate(boxes):
-      fname = f'{img_path.stem}_{i:09}.png'
-      img.crop(b).save(chip_path/fname, 'PNG')
-      # print(f'Saved {chip_path/fname}')
-
-# %%
+  tiff = gdal.Open(str(img_path))
+  num_wide = ceil(tiff.RasterXSize/chip_size)
+  num_high = ceil(tiff.RasterYSize/chip_size)
+  boxes = crop_box_gen(num_wide, num_high, chip_size)
+  for i, b in enumerate(boxes):
+    fname = chip_path/f'{img_path.stem}_{i}.png'
+    gdal.Translate(str(fname), tiff, format="PNG", projWin=b) # check out more args here: https://gdal.org/python/osgeo.gdal-module.html#TranslateOptions
+  del tiff
