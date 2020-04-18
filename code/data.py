@@ -20,6 +20,12 @@ class DBConnection:
         self.cur.close()
         self.conn.close()
     
+    def execute(self, command):
+        if config.DEBUG and not config.DEBUG_DB_ACCESS:
+            pass
+        else:
+            self.cur.execute(command)
+    
     def read_field_from_field_value_table(self, r, f, v, tbl):
         res = None
         cmd = f"""
@@ -44,10 +50,12 @@ class DBConnection:
         # print(cmd)
         self.open()
         try:
-            if config.DB_ACCESS:
-                self.cur.execute(cmd)
-            else:
-                print("WARNING: Running on localhost. Would now write to table:", tbl)
+            self.execute(cmd)
+            if config.DEBUG:
+                if config.DEBUG_DB_ACCESS:
+                    print(f"writing to table {tbl}")
+                else:
+                    print(f"DB access turned off; would write to table {tbl}")
         except psycopg2.errors.UniqueViolation as e: # pylint: disable=no-member
             print('ERROR:', e)
         self.close()

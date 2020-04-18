@@ -1,0 +1,12 @@
+APP_HOST = 'localhost'
+APP_PORT = 9000
+
+SH_USER = 'jonaraph'
+SH_PWD = 'fjjEwvMDHyJH9Fa'
+
+DB_HOST = 'localhost' 
+DB_USER = 'postgres'
+DB_PASSWORD = 'postgres' 
+DB_DATABASE = 'db_slick' 
+DB_PORT = '5432' 
+DB_ACCESS = True 

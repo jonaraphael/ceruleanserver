@@ -3,13 +3,13 @@ import importlib
 APP_HOST = '0.0.0.0'
 APP_PORT = 5000
 DEBUG = True
-    
+
 DB_HOST = 'db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com' 
 DB_USER = 'postgres'
 DB_PASSWORD = 'postgres' 
 DB_DATABASE = 'db_slick' 
 DB_PORT = '5432' 
-DB_ACCESS = False # Override in local_config if you want to hit the real DB
+DEBUG_DB_ACCESS = True # switches on/off all DB functionality if in debug mode
 
 SH_USER = 'jonaraph' 
 SH_PWD = 'fjjEwvMDHyJH9Fa'
