@@ -1,4 +1,4 @@
-from fastai.vision import Path
+from pathlib import PurePath as Path
 from math import ceil
 from os import makedirs
 from datetime import datetime
