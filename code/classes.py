@@ -5,6 +5,7 @@ import shapely.geometry as sh
 import config
 import json
 import requests
+import shutil
 
 class SNSO:
     def __init__(self, sns):
@@ -14,16 +15,16 @@ class SNSO:
         self.prod_id = self.sns_msg["id"]
         
         # Calculated
-        self.isvv = 'V' in self.sns_msg['polarization']
+        self.is_vv = 'V' in self.sns_msg['polarization']
         self.s3 = {"bucket" : f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/",}
         self.dir = self.prod_id
 
         # Placeholders
         self.isoceanic = None
         self.oceanintersection = None
-        self.machinable = self.isvv # Later amended to include isoceanic
-
-        if self.isvv: # we don't want to process any polarization other than vv
+        self.machinable = self.is_vv # Later amended to include isoceanic
+        
+        if self.is_vv: # we don't want to process any polarization other than vv
             self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
             self.s3["grd_tiff_dest"] = f"{self.dir}/vv_grd.tiff"
             self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
@@ -41,14 +42,15 @@ class SNSO:
                 os.system(self.s3["grd_tiff_download_str"])
 
     def cleanup(self):
-        os.system(f'rm -f -r {self.dir}')
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
 
     def update_intersection(self, ocean_shape):
         scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
         self.isoceanic = scene_poly.intersects(ocean_shape)
         inter = scene_poly.intersection(ocean_shape)
         self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
-        self.machinable = self.isoceanic and self.isvv
+        self.machinable = self.isoceanic and self.is_vv
 
     def sns_db_row(self): # Warning! PostgreSQL hates capital letters, so the keys are different between the SNS and the DB
         tbl = 'sns'
