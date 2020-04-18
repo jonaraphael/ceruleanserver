@@ -15,6 +15,8 @@ SH_USER = 'jonaraph'
 SH_PWD = 'fjjEwvMDHyJH9Fa'
 
 ML_PKL = ''
+RUN_ML = False
+CLEANUP_SNS = True
 
 # override with values from a local file, only if it exists
 if importlib.util.find_spec('local_config') is not None:

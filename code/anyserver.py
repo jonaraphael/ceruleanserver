@@ -20,9 +20,10 @@ def process_sns(sns):
     print("shgrd", sho.grd_db_row()[0].get("identifier"))
     print("shocn", sho.ocn_db_row()[0].get("identifier"))
     print("machinable", snso.machinable)
-    # if snso.machinable: # This will reduce the volume of images processed by about 60%
-    # machine(snso) # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
-    snso.cleanup()
+    if snso.machinable and config.RUN_ML: # This will reduce the volume of images processed by about 60%
+        machine(snso) # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
+    if config.CLEANUP_SNS:
+         snso.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])
