@@ -7,7 +7,7 @@ import importlib
 # Flask app settings
 APP_HOST = '0.0.0.0'
 APP_PORT = 5000
-DEBUG = True
+DEBUG = False
 
 # Database connection settings
 DB_HOST = 'db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com' 
