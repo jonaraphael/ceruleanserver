@@ -4,7 +4,7 @@ The local configs are for dev debugging/testing.
 """
 import importlib
 
-# Flask app settings"""
+# Flask app settings
 APP_HOST = '0.0.0.0'
 APP_PORT = 5000
 DEBUG = True
@@ -23,7 +23,7 @@ SH_USER = 'jonaraph'
 SH_PWD = 'fjjEwvMDHyJH9Fa'
 
 ML_PKL = ''
-RUN_ML = False
+RUN_ML = True
 CLEANUP_SNS = True
 
 # If the local_config module is found, import all those settings, overriding any here that overlap.

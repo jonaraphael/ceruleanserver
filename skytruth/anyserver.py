@@ -11,6 +11,11 @@ from ml import machine
 app = Flask(__name__)
 
 def process_sns(sns):
+    """Processes the raw SNS received from Sinergise
+    
+    Arguments:  
+        sns {dict} -- contains all the metadata and details of a new satellite image on S3
+    """    
     snso = SNSO(sns)
     snso.update_intersection(ocean_shape)
     db.insert_dict_as_row(*snso.sns_db_row())
@@ -29,6 +34,11 @@ def process_sns(sns):
 # Home page
 @app.route("/", methods=['GET', 'POST'])
 def home():
+    """The function called by Lambda when forwarding an SNS
+    
+    Returns:
+        HTTP Reponse -- 200 if successful
+    """    
     sns = {}
     if request.data:
         event = json.loads(request.data)
@@ -56,7 +66,7 @@ def home():
                 "error": r.text, 
                 "status_code" : 406}
     elif mess_type == 'Notification':
-        process_sns(sns)
+        process_sns(sns) # XXXBen Is it possible to return success before deploying resources to process the content of the SNS?
         res = {
             "msg": "Notification processed",
             "Message": json.loads(sns.get("Message")), 

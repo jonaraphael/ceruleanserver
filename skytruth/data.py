@@ -3,6 +3,8 @@ import pandas as pd
 import config
 
 class DBConnection:
+    """A class that knows how to connect to and manage connections to the DB
+    """    
     def __init__(self, host=config.DB_HOST, user=config.DB_USER, password=config.DB_PASSWORD, 
         database=config.DB_DATABASE, port=config.DB_PORT):
         self.host = host
@@ -12,21 +14,41 @@ class DBConnection:
         self.port = port
     
     def open(self):
+        """Opens a connection to our DB
+        """        
         self.conn = psycopg2.connect(host=self.host, user=self.user, password=self.password, database=self.database, port=self.port)
         self.conn.set_session(autocommit=True)
         self.cur = self.conn.cursor()
     
     def close(self):
+        """Closes the connection to our DB
+        """        
         self.cur.close()
         self.conn.close()
     
     def execute(self, command):
+        """Runs a command on the DB
+        
+        Arguments:
+            command {str} -- any SQL query to be run on the DB
+        """        
         if config.DEBUG and not config.DEBUG_DB_ACCESS:
             pass
         else:
             self.cur.execute(command)
     
     def read_field_from_field_value_table(self, r, f, v, tbl):
+        """Read back a single column's list of rows from the DB based on query field+value
+        
+        Arguments:
+            r {str} -- READ column name to return
+            f {str} -- FIELD column name to search for VALUE
+            v {str} -- VALUE any data that you are filtering for
+            tbl {str} -- name of the table you want to filter
+        
+        Returns:
+            list -- the READ field from a list of objects (one for each row that meets FIELD+VALUE filter)
+        """        
         res = None
         cmd = f"""
             SELECT {r} FROM {tbl}
@@ -42,6 +64,12 @@ class DBConnection:
         return res
     
     def insert_dict_as_row(self, dct, tbl):
+        """Push a dictionary into a new row into any table on the DB
+        
+        Arguments:
+            dct {dict} -- a dictionary with keys for any columns to be added
+            tbl {str} -- name of the table to be added to
+        """        
         keys, values = zip(*dct.items())        
         cmd = f"""
             INSERT INTO {tbl}({', '.join(keys)})
