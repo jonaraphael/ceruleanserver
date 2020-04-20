@@ -1,0 +1,4 @@
+{
+    "python.pythonPath": "C:\\Users\\fried\\.conda\\envs\\skytruth\\python.exe",
+    "python.autoComplete.extraPaths": [".\\ceruleanserver"],
+}
