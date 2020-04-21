@@ -6,6 +6,7 @@ import config
 import json
 import requests
 import shutil
+from pathlib import Path
 
 class SNSO:
     """A Class that organizes information in the SNS
@@ -40,16 +41,15 @@ class SNSO:
         if not self.s3["grd_tiff"]:
             print('ERROR No grd tiff found with VV polarization')
         else:
-            if not os.path.exists(self.dir):
-                os.mkdir(self.dir)
-            if not os.path.exists(self.s3["grd_tiff_dest"]):
+            Path(self.dir).mkdir(exist_ok=True)
+            if not Path(self.s3["grd_tiff_dest"]).exists():
                 os.system(self.s3["grd_tiff_download_str"])
 
     def cleanup(self):
         """Delete any local directory made to store the GRD
         """        
-        if os.path.exists(self.dir):
-            shutil.rmtree(self.dir)
+        if Path(self.dir).exists():
+            Path(self.dir).unlink()
 
     def update_intersection(self, ocean_shape):
         """Calculate geometric intersections with the supplied geometry
@@ -140,17 +140,16 @@ class SHO:
         if not self.ocn:
             print('ERROR No OCN found for this GRD')
         else:
-            if not os.path.exists(self.dir):
-                os.mkdir(self.dir)
+            Path(self.dir).mkdir(exist_ok=True)
             with requests.Session() as s:
                 p = s.get(self.URLs.get("download_ocn"))
                 open(f'{self.dir}/ocn.zip', 'wb').write(p.content)
 
     def cleanup(self):
         """Delete any local directory made to store the OCN
-        """        
-        if os.path.exists(self.dir):
-            shutil.rmtree(self.dir)
+        """
+        if Path(self.dir).exists():
+            Path(self.dir).unlink()
 
     def grd_db_row(self):
         """Creates a dictionary that aligns with our GRD DB columns
