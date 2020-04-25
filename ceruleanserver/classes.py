@@ -37,7 +37,8 @@ class SNSO:
 
     def download_grd_tiff(self):
         """Creates a local directory and downloads a GeoTiff (often ~700MB)
-        """        
+        """
+        if config.VERBOSE: print('Downloading GRD Tiff')
         if not self.s3["grd_tiff"]:
             print('ERROR No grd tiff found with VV polarization')
         else:
@@ -56,7 +57,7 @@ class SNSO:
         
         Arguments:
             ocean_shape {shapely geom} -- built from a geojson of the worlds oceans
-        """        
+        """
         scene_poly = sh.polygon.Polygon(self.sns_msg['footprint']['coordinates'][0][0])
         self.isoceanic = scene_poly.intersects(ocean_shape)
         inter = scene_poly.intersection(ocean_shape)
@@ -95,7 +96,7 @@ class SHO:
     def __init__(self, prod_id, user=config.SH_USER, pwd=config.SH_PWD):
         self.prod_id = prod_id
         self.generic_id = self.prod_id[:7]+"????_?"+self.prod_id[13:-4]+"*"
-        self.URLs = {"query_prods" : f"https://{user}:{pwd}@scihub.copernicus.eu/apihub/search?rows=100&q=(platformname:Sentinel-1 AND filename:{self.generic_id})",}
+        self.URLs = {"query_prods" : f"https://{user}:{pwd}@scihub.copernicus.eu/apihub/search?q=(platformname:Sentinel-1 AND filename:{self.generic_id})",}
 
         # Placeholders
         self.grd = {}
@@ -136,7 +137,8 @@ class SHO:
 
     def download_ocn(self):
         """Create a local directory, and download an OCN zip file to it
-        """        
+        """
+        if config.VERBOSE: print('Downloading OCN')
         if not self.ocn:
             print('ERROR No OCN found for this GRD')
         else:

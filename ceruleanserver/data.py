@@ -35,6 +35,7 @@ class DBConnection:
         if config.DEBUG and not config.DEBUG_DB_ACCESS:
             pass
         else:
+            if config.VERBOSE: print('Running SQL: ', command)
             self.cur.execute(command)
     
     def read_field_from_field_value_table(self, r, f, v, tbl):
@@ -69,7 +70,8 @@ class DBConnection:
         Arguments:
             dct {dict} -- a dictionary with keys for any columns to be added
             tbl {str} -- name of the table to be added to
-        """        
+        """
+        if config.VERBOSE: print('Inserting into: ', tbl)
         keys, values = zip(*dct.items())        
         cmd = f"""
             INSERT INTO {tbl}({', '.join(keys)})
@@ -79,7 +81,7 @@ class DBConnection:
         self.open()
         try:
             self.execute(cmd)
-            if config.DEBUG:
+            if config.VERBOSE:
                 if config.DEBUG_DB_ACCESS:
                     print(f"writing to table {tbl}")
                 else:

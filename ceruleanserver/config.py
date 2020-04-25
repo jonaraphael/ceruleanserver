@@ -8,6 +8,7 @@ import importlib
 APP_HOST = '0.0.0.0'
 APP_PORT = 5000
 DEBUG = False
+VERBOSE = False
 
 # Database connection settings
 DB_HOST = 'db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com' 
@@ -22,7 +23,9 @@ DEBUG_DB_ACCESS = True
 SH_USER = 'jonaraph' 
 SH_PWD = 'fjjEwvMDHyJH9Fa'
 
-ML_PKL = ''
+# ML Settings
+ML_PKL = 's3://skytruth-cerulean/model_artifacts/1-512-0.58.pkl'
+UPDATE_ML = True
 RUN_ML = True
 CLEANUP_SNS = True
 

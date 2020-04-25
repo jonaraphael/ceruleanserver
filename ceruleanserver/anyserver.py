@@ -5,10 +5,15 @@ import shapely.geometry as sh
 from data import DBConnection
 import config
 from classes import SHO, SNSO
-from ml import machine
+from ml import machine, load_learner_from_s3
 
 # Create app
 app = Flask(__name__)
+
+def load_ocean_shape():
+    with open("OceanGeoJSON_lowres.geojson") as f:
+        ocean_features = json.load(f)["features"]
+    return sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
 
 def process_sns(sns):
     """Processes the raw SNS received from Sinergise
@@ -22,14 +27,14 @@ def process_sns(sns):
     sho = SHO(snso.prod_id)
     if sho.grd: db.insert_dict_as_row(*sho.grd_db_row())
     if sho.ocn: db.insert_dict_as_row(*sho.ocn_db_row())
-    if config.DEBUG:
+    if config.VERBOSE:
         print("shgrd", sho.grd_db_row()[0].get("identifier"))
         print("shocn", sho.ocn_db_row()[0].get("identifier"))
         print("machinable", snso.machinable)
     if snso.machinable and config.RUN_ML: # This will reduce the volume of images processed by about 60%
-        machine(snso) # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
+        machine(learner, snso) # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
     if config.CLEANUP_SNS:
-         snso.cleanup()
+        snso.cleanup()
 
 # Home page
 @app.route("/", methods=['GET', 'POST'])
@@ -79,10 +84,10 @@ def home():
     return make_response(jsonify(res), res["status_code"])
 
 if __name__ in ["__main__", "anyserver"]: # Adding "anyserver" means that this section is entered during vs code debug mode
-    db = DBConnection()
+    # Permanent Objects:
+    db = DBConnection() # Database Object
+    ocean_shape = load_ocean_shape() # Ocean Geometry
+    learner = load_learner_from_s3() # ML PKL
 
-    with open("OceanGeoJSON_lowres.geojson") as f:
-        ocean_features = json.load(f)["features"]
-    ocean_shape = sh.GeometryCollection([sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features])[0]
-
-    app.run(host=config.APP_HOST, debug=config.DEBUG) # port=config.APP_PORT
+    # Start listening on the default port
+    app.run(host=config.APP_HOST, debug=config.DEBUG)
