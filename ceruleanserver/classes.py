@@ -134,6 +134,23 @@ class SHO:
 
     def __repr__(self):
         return f"<SciHubObject: {self.prod_id}>"
+    
+    def download_grd_tiff_from_s3(self):
+        """Create a local directory, and download a GRD file to it if it exists in Sinergise's archives
+        """
+        if config.VERBOSE: print('Downloading GRD')
+        if not self.grd:
+            print('ERROR No GRD found for this product ID')
+        else:
+            self.s3 = {"path" : self.prod_id[7:10]+'/'+self.prod_id[17:21]+'/'+str(int(self.prod_id[21:23]))+'/'+str(int(self.prod_id[23:25]))+'/'+self.prod_id[4:6]+'/'+self.prod_id[14:16]+'/'+self.prod_id,}
+            mode = f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'"
+            self.s3["bucket"] = f"s3://sentinel-s1-l1c/{self.s3['path']}/"
+            self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{mode.lower()}-vv.tiff"
+            self.s3["grd_tiff_dest"] = f"{self.grd_id}/vv_grd.tiff"
+            self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
+            Path(self.grd_id).mkdir(exist_ok=True)
+            if not Path(self.s3["grd_tiff_dest"]).exists():
+                os.system(self.s3["grd_tiff_download_str"])
 
     def download_ocn(self):
         """Create a local directory, and download an OCN zip file to it
