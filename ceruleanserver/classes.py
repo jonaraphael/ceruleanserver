@@ -18,6 +18,7 @@ class SNSO:
         self.prod_id = self.sns_msg["id"]
         
         # Calculated
+        self.is_highdef = 'H' in self.prod_id[10]
         self.is_vv = 'V' in self.sns_msg['polarization']
         self.s3 = {"bucket" : f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/",}
         self.dir = self.prod_id
@@ -25,7 +26,7 @@ class SNSO:
         # Placeholders
         self.isoceanic = None
         self.oceanintersection = None
-        self.machinable = self.is_vv # Later amended to include isoceanic
+        self.machinable = self.is_highdef and self.is_vv  # Later amended to include isoceanic
         
         if self.is_vv: # we don't want to process any polarization other than vv
             self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
@@ -62,7 +63,7 @@ class SNSO:
         self.isoceanic = scene_poly.intersects(ocean_shape)
         inter = scene_poly.intersection(ocean_shape)
         self.oceanintersection = {k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg['footprint'].items()} # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
-        self.machinable = self.isoceanic and self.is_vv
+        self.machinable = self.machinable and self.isoceanic
 
     def sns_db_row(self): # Warning! PostgreSQL hates capital letters, so the keys are different between the SNS and the DB
         """Creates a dictionary that aligns with our SNS DB columns
