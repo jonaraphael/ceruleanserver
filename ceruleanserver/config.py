@@ -24,7 +24,7 @@ SH_USER = 'jonaraph'
 SH_PWD = 'fjjEwvMDHyJH9Fa'
 
 # ML Settings
-ML_PKL = 's3://skytruth-cerulean/model_artifacts/1-512-0.58.pkl'
+ML_PKL = 's3://skytruth-cerulean/model_artifacts/18_512_0.722.pkl'
 UPDATE_ML = True
 RUN_ML = True
 CLEANUP_SNS = True
