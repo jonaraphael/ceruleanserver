@@ -21,7 +21,7 @@ class SNSO:
         self.is_highdef = 'H' in self.prod_id[10]
         self.is_vv = 'V' in self.sns_msg['polarization']
         self.s3 = {"bucket" : f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/",}
-        self.dir = self.prod_id
+        self.grd_dir = Path(self.prod_id)
 
         # Placeholders
         self.isoceanic = None
@@ -30,7 +30,7 @@ class SNSO:
         
         if self.is_vv: # we don't want to process any polarization other than vv
             self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
-            self.s3["grd_tiff_dest"] = f"{self.dir}/vv_grd.tiff"
+            self.s3["grd_tiff_dest"] = self.grd_dir/"vv_grd.tiff"
             self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
         
     def __repr__(self):
@@ -43,15 +43,15 @@ class SNSO:
         if not self.s3["grd_tiff"]:
             print('ERROR No grd tiff found with VV polarization')
         else:
-            Path(self.dir).mkdir(exist_ok=True)
-            if not Path(self.s3["grd_tiff_dest"]).exists():
+            self.grd_dir.mkdir(exist_ok=True)
+            if not self.s3["grd_tiff_dest"].exists():
                 os.system(self.s3["grd_tiff_download_str"])
 
     def cleanup(self):
         """Delete any local directory made to store the GRD
         """        
-        if Path(self.dir).exists():
-            Path(self.dir).unlink()
+        if self.grd_dir.exists():
+            self.grd_dir.unlink()
 
     def update_intersection(self, ocean_shape):
         """Calculate geometric intersections with the supplied geometry
@@ -104,9 +104,10 @@ class SHO:
         self.ocn = {}
         self.grd_id = None
         self.grd_shid = None
+        self.grd_dir = None
         self.ocn_id = None
         self.ocn_shid = None
-        self.dir = None
+        self.ocn_dir = None
         
         with requests.Session() as s:
             p = s.post(self.URLs["query_prods"])
@@ -125,18 +126,19 @@ class SHO:
             
             if self.grd:
                 self.grd_id = self.grd.get('title')
+                self.grd_dir = Path(self.grd_id)
                 self.grd_shid = self.grd.get('id')
             
             if self.ocn:
                 self.ocn_id = self.ocn.get('title')
-                self.dir = self.ocn_id
+                self.ocn_dir = Path(self.ocn_id)
                 self.ocn_shid = self.ocn.get('id')
                 self.URLs["download_ocn"] = f"https://{user}:{pwd}@scihub.copernicus.eu/dhus/odata/v1/Products('{self.ocn_shid}')/%24value"
 
     def __repr__(self):
         return f"<SciHubObject: {self.prod_id}>"
     
-    def download_grd_tiff_from_s3(self):
+    def download_grd_tiff_from_s3(self, grd_path=None):
         """Create a local directory, and download a GRD file to it if it exists in Sinergise's archives
         """
         if config.VERBOSE: print('Downloading GRD')
@@ -147,29 +149,30 @@ class SHO:
             mode = f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'"
             self.s3["bucket"] = f"s3://sentinel-s1-l1c/{self.s3['path']}/"
             self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{mode.lower()}-vv.tiff"
-            self.s3["grd_tiff_dest"] = f"{self.grd_id}/vv_grd.tiff"
+            self.s3["grd_tiff_dest"] = grd_path or self.grd_dir/"vv_grd.tiff"
             self.s3["grd_tiff_download_str"] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
-            Path(self.grd_id).mkdir(exist_ok=True)
-            if not Path(self.s3["grd_tiff_dest"]).exists():
+            self.grd_dir.mkdir(exist_ok=True)
+            if not self.s3["grd_tiff_dest"].exists():
                 os.system(self.s3["grd_tiff_download_str"])
 
-    def download_ocn(self):
+    def download_ocn(self, ocn_path=None):
         """Create a local directory, and download an OCN zip file to it
         """
+        ocn_dest = ocn_path or self.ocn_dir/'ocn.zip'
         if config.VERBOSE: print('Downloading OCN')
         if not self.ocn:
             print('ERROR No OCN found for this GRD')
         else:
-            Path(self.dir).mkdir(exist_ok=True)
+            ocn_dest.parent.mkdir(exist_ok=True)
             with requests.Session() as s:
                 p = s.get(self.URLs.get("download_ocn"))
-                open(f'{self.dir}/ocn.zip', 'wb').write(p.content)
+                open(ocn_dest, 'wb').write(p.content)
 
     def cleanup(self):
         """Delete any local directory made to store the OCN
         """
-        if Path(self.dir).exists():
-            Path(self.dir).unlink()
+        if self.ocn_dir.exists():
+            self.ocn_dir.unlink()
 
     def grd_db_row(self):
         """Creates a dictionary that aligns with our GRD DB columns
