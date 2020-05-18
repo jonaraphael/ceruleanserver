@@ -42,10 +42,12 @@ class SNSO:
         if config.VERBOSE: print('Downloading GRD Tiff')
         if not self.s3["grd_tiff"]:
             print('ERROR No grd tiff found with VV polarization')
+            return False
         else:
             self.grd_dir.mkdir(exist_ok=True)
             if not self.s3["grd_tiff_dest"].exists():
                 os.system(self.s3["grd_tiff_download_str"])
+            return self.s3["grd_tiff_dest"]
 
     def cleanup(self):
         """Delete any local directory made to store the GRD
@@ -110,7 +112,11 @@ class SHO:
         self.ocn_dir = None
         
         with requests.Session() as s:
-            p = s.post(self.URLs["query_prods"])
+            try:
+                p = s.post(self.URLs["query_prods"])
+            except Exception as e:
+                print("ERROR: scihub.copernicus.eu is down")
+                raise(e)
             self.query_prods_res = xmltodict.parse(p.text)
         
         if self.query_prods_res.get('feed').get('opensearch:totalResults') == '0':
@@ -144,6 +150,7 @@ class SHO:
         if config.VERBOSE: print('Downloading GRD')
         if not self.grd:
             print('ERROR No GRD found for this product ID')
+            return False
         else:
             self.s3 = {"path" : self.prod_id[7:10]+'/'+self.prod_id[17:21]+'/'+str(int(self.prod_id[21:23]))+'/'+str(int(self.prod_id[23:25]))+'/'+self.prod_id[4:6]+'/'+self.prod_id[14:16]+'/'+self.prod_id,}
             mode = f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'"
@@ -154,6 +161,7 @@ class SHO:
             self.grd_dir.mkdir(exist_ok=True)
             if not self.s3["grd_tiff_dest"].exists():
                 os.system(self.s3["grd_tiff_download_str"])
+            return self.s3["grd_tiff_dest"]
 
     def download_ocn(self, ocn_path=None):
         """Create a local directory, and download an OCN zip file to it
@@ -162,11 +170,13 @@ class SHO:
         if config.VERBOSE: print('Downloading OCN')
         if not self.ocn:
             print('ERROR No OCN found for this GRD')
+            return False
         else:
             ocn_dest.parent.mkdir(exist_ok=True)
             with requests.Session() as s:
                 p = s.get(self.URLs.get("download_ocn"))
                 open(ocn_dest, 'wb').write(p.content)
+            return ocn_dest
 
     def cleanup(self):
         """Delete any local directory made to store the OCN

@@ -2,7 +2,7 @@ from pathlib import Path
 from datetime import datetime
 from fastai2.learner import load_learner
 from osgeo import gdal
-from numpy import zeros, floor, ceil, uint8, where
+from numpy import zeros, floor, ceil, uint8, where, array, dstack
 from PIL import Image as PILimage
 import shutil
 import config
@@ -22,11 +22,11 @@ def machine(learner, snso):
     max_chip_qty = None # No limit to the number of chips
     threshold = None # Between 0 (most) and 1 (least inclusive), which confidence should be considered oil
     start_over = True # Do we delete all files before creating chips, or pick up where we left off
-    overhang = False
-    record_nonzeros = False
-    img_path = snso.s3["grd_tiff_dest"]
-    inf_dir = img_path.parent/'inf'
-    merged_path = img_path.parent/'merged.tif'
+    overhang = False # Should some chips hang over the edge of the original image (and therefore might have very few useful pixels)
+    record_nonzeros = False # Should the images with non-zero average pixel value be recorded in a CSV
+    img_path = snso.s3["grd_tiff_dest"] # Where the new image is
+    inf_dir = img_path.parent/'inf' # Where the inference chips should be stored
+    merged_path = img_path.parent/'merged.tif' # Where the merged inference mask should be stored
     
     # Download Large GeoTiff
     snso.download_grd_tiff()
@@ -136,20 +136,65 @@ def infer(png_path, learner, threshold = None):
     # outBand.FlushCache()
     # del tif
 
-def merge_chips(chp_dir, merged_path):
+def merge_chips(chp_dir, merged_path, chip_ext="tif"):
     """Merge multiple chips into one large tif
     
     Arguments:
         chp_dir {Path} -- Folder where multiple PNGs are stored
         merged_path {Path} -- File where the merged TIF will be generated
+
+    Keyword Arguments:
+        chip_ext {str} -- The file extension of the chips to be merged (default: {"tif"})
     """
     if config.VERBOSE: print('Merging Masks')
     if (merged_path).exists():
-        (merged_path).unlink() # Delete previously file from previous merge attempt
+        (merged_path).unlink() # Delete file from previous merge attempt (gdal_merge will NOT overwrite!)
     # gdal.Warp(destNameOrDestDS=str(merged_path), srcDSOrSrcDSTab=[str(p) for p in chp_dir.glob('*.png')], format='GTiff') # This doesn't work because PNG clamps to [0-255], and no_data makes some pixels invisible
-    cmd = f'gdal_merge.py -o {merged_path} {chp_dir}/*.tif'
+    cmd = f'gdal_merge.py -o {merged_path} {chp_dir}/*.{chip_ext}'
     os.system(cmd)
     shutil.rmtree(chp_dir)
+
+def scale(b, arr):
+    """Scale OCN bands by their mins/maxes
+
+    Arguments:
+        b {dict} -- A dictionary that contains 4 floats: min, max, no_data_in, no_data_out
+        arr {np.array} -- A 2D matrix of numbers representing the corresponding raw band from an OCN
+
+    Returns:
+        np.array -- A 2D matrix representing a scaled version of the input array
+    """    
+    no_data = where(arr == b["no_data_in"])
+    res = 255*((arr-b["min"])/(b["max"]-b["min"]))
+    res[no_data] = b["no_data_out"]
+    res = array([[uint8(a) for a in b] for b in res])
+    return res
+
+def nc_to_png(nc_path, bands, target_size, out_path=None):
+    """Convert a NetCDF file into a scaled PNG with channels from the bands dictionary
+
+    Arguments:
+        nc_path {Path} -- Where the .nc file is stored
+        bands {dict} -- Dictionary of bands to be extracted
+        target_size {(int,int)} -- 2-tuple number of pixels wide and high for the output
+
+    Keyword Arguments:
+        out_path {Path} -- Where to store the output png (default: {nc_path.with_name('nc_rast.png')})
+
+    Returns:
+        out_path
+    """    
+    out_path = out_path or nc_path.with_name('nc_rast.png')
+    out = [] # Initialize
+    for b in bands: # For the bands we care about (defined in a JSON)
+        owi = gdal.Open(f'NETCDF:{nc_path}:{b}') # Open the band (GDAL fails if this is moved inside the next line)
+        out.append(scale(bands[b], owi.GetRasterBand(1).ReadAsArray())) # Scale the band between 0 and 255
+        del owi # Remove the gdal object from memory
+    (PILimage.fromarray(dstack(out)) # Turn the raster arrays into an image
+        .resize(target_size) # Resize to match Training Data dimensions
+        .transpose(PILimage.FLIP_TOP_BOTTOM) # Flip the Y axis (not clear why this is necessary, or if it needs exceptions)
+        .save(out_path)) # Save the file
+    return out_path # Return the path of the new file
 
 def load_learner_from_s3():
     """Import the latest trained model from S3

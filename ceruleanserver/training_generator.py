@@ -3,12 +3,9 @@ from osgeo import gdal
 from pathlib import Path
 import config
 from classes import SHO
-from ml import crop_box_gen, img_to_chips
+from ml import crop_box_gen, img_to_chips, nc_to_png
 import shutil
-from numpy import where, array, uint8, dstack
-from PIL import Image
 import zipfile
-
 
 #%% Set up variables for next two cells
 chip_size_orig = 4096
@@ -16,29 +13,31 @@ chip_size_reduced = 512
 max_chip_qty = None
 start_over = True
 overhang = False
-cleanup = True
+cleanup = False
 prods = ['S1A_IW_GRDH_1SDV_20200128T001658_20200128T001733_030993_038F42_D900',]
+path = Path('.') # Set the location where the chips will be stored
+# path = Path('/Volumes/OsmoExt/SkyTruth') # Jona's external harddrive
 
 #%% Make chips from a GRD
-chp_dir = Path('training/chp')
+chp_dir = path/'training/chp'
 for pid in set(prods):
-    SHO(pid).download_grd_tiff_from_s3()
-    img_path = Path(pid)/"vv_grd.tiff"
-    hand_edited_mask_path = img_path.with_name('hand_edited_mask.png')
-    gdal.Translate(str(hand_edited_mask_path), str(img_path), widthPct=chip_size_reduced/chip_size_orig*100, heightPct=chip_size_reduced/chip_size_orig*100, outputType=gdal.GDT_Byte) # Save a copy with reduced resolution while we have the file open!
+    img_path = path/pid/"vv_grd.tiff"
+    SHO(pid).download_grd_tiff_from_s3(img_path)
+    mask_path = path/pid/'hand_edited_mask.png'
+    gdal.Translate(str(mask_path), str(img_path), widthPct=chip_size_reduced/chip_size_orig*100, heightPct=chip_size_reduced/chip_size_orig*100, outputType=gdal.GDT_Byte) # Save a copy with reduced resolution while we have the file open!
     img_to_chips(img_path, chp_dir, chip_size_orig, chip_size_reduced, pid, overhang, max_chip_qty, start_over)
     if cleanup: img_path.unlink() # Delete the huge GRD # pylint: disable=no-member
     
 #%%  Make chips from a handmade mask
 # XXX Before running this block, you must edit hand_edited_mask.png in photoshop to create a [0,1] mask
-chp_dir = Path('training/lbl')
+chp_dir = path/'training/lbl'
 for pid in set(prods):
-    img_path = Path(pid)/"hand_edited_mask.png"
+    img_path = path/pid/"hand_edited_mask.png"
     img_to_chips(img_path, chp_dir, chip_size_reduced, chip_size_reduced, pid, overhang, max_chip_qty, start_over, True)
     if cleanup: shutil.rmtree(str(img_path.parent)) # Remove the folder holding the raw files
 
-#%%  Make chips from an OCN
-bands = {
+#%% Make chips from an OCN
+bands = { # from https://sentinel.esa.int/web/sentinel/ocean-wind-field-component
     "owiWindSpeed": {
         "min": 0.,
         "max": 25.,
@@ -58,49 +57,25 @@ bands = {
         "no_data_out": 0.
     },}
 
-def scale(b, arr):
-    no_data = where(arr == bands[b]["no_data_in"])
-    res = 255*((arr-bands[b]["min"])/(bands[b]["max"]-bands[b]["min"]))
-    res[no_data] = bands[b]["no_data_out"]
-    res = array([[uint8(a) for a in b] for b in res])
-    return res
-
-def ingest_ocn(nc_path, target_size, out_path=None):
-    out_path = out_path or nc_path.with_name('nc_rast.png')
-    out = [] # Initialize
-    for b in bands: # For the bands we care about (defined in a JSON)
-        owi = gdal.Open(f'NETCDF:{nc_path}:{b}') # Open the band
-        out.append(scale(b, owi.GetRasterBand(1).ReadAsArray())) # Scale the band between 0 and 255
-        del owi # Remove the gdal object from memory
-    (Image.fromarray(dstack(out)) # Turn the raster arrays into an image
-        .resize(target_size) # Resize to match Training Data dimensions
-        .transpose(Image.FLIP_TOP_BOTTOM) # Flip the Y axis (not clear why this is necessary, or if it needs exceptions)
-        .save(out_path)) # Save the file
-    return out_path # Return the path of the new file
-
+chp_dir = path/'training/ocn'
 for pid in set(prods):
-    print(pid)
-    # external = Path('.')
-    try:
-        external = Path('/Volumes/OsmoExt/SkyTruth')
-        sho = SHO(pid)
-        grd_path = external/pid/"vv_grd.tiff"
-        sho.download_grd_tiff_from_s3(grd_path)
-        grd = gdal.Open(str(grd_path))
-        target_size = (int(chip_size_reduced/chip_size_orig*grd.RasterXSize), int(chip_size_reduced/chip_size_orig*grd.RasterYSize))
-        del grd
+    sho = SHO(pid)
 
-        ocnzip_path = external/pid/"ocn.zip"
-        ocn_dir = external/'training/ocn'
-        ocn_dir.mkdir(parents=True, exist_ok=True)
-        sho.download_ocn(ocnzip_path)
+    # This section is just to get the target size that the OCN should be
+    img_path = path/pid/"vv_grd.tiff"
+    sho.download_grd_tiff_from_s3(img_path)
+    grd = gdal.Open(str(img_path))
+    target_size = (int(chip_size_reduced/chip_size_orig*grd.RasterXSize), int(chip_size_reduced/chip_size_orig*grd.RasterYSize))
+    del grd
+
+    # This section downloads, scales, and chops up the OCN
+    ocnzip_path = path/pid/"ocn.zip"
+    if sho.download_ocn(ocnzip_path): # This will print an error and return False if no OCN is found
         with zipfile.ZipFile(ocnzip_path, 'r') as zip_ref:
             zip_ref.extractall(ocnzip_path.parent)
-        ocn_path = [p for p in (ocnzip_path.with_name(sho.ocn_id+'.SAFE')/'measurement').glob('*.nc')][0]
-        ocn_png_path = ingest_ocn(ocn_path, target_size)
-        img_to_chips(ocn_png_path, ocn_dir, chip_size_orig, chip_size_reduced, sho.grd_id, overhang, max_chip_qty, start_over)
-    except:
-        print('ERROR --', pid)
+        nc_path = next((ocnzip_path.with_name(sho.ocn_id+'.SAFE')/'measurement').glob('*.nc')) # Grab the first nc file (XXX assuming there will always be exactly 1)
+        ocn_path = nc_to_png(nc_path, bands, target_size)
+        img_to_chips(ocn_path, chp_dir, chip_size_orig, chip_size_reduced, sho.grd_id, overhang, max_chip_qty, start_over)
 
 #%% Sorted list of products used to train the fastai2 model
 prods = [
@@ -221,3 +196,5 @@ prods = [
 #     "S1B_IW_GRDH_1SDV_20190104T100635_20190104T100700_14343_01AAFE_7570",
 #     "S1A_IW_GRDH_1SDV_20190101T193354_20190101T193421_25288_02CC18_DB4C",
 ]
+
+# %%
