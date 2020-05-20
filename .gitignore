@@ -2,3 +2,5 @@ __pycache__/
 local_config.py
 .vscode
 log.txt
+aws_credentials.py
+modeltraining/data
