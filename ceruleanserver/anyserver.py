@@ -3,7 +3,7 @@ import json
 import requests
 import shapely.geometry as sh
 from data import DBConnection
-import config
+import configs.serverconfig as config
 from classes import SHO, SNSO
 from ml import machine, load_learner_from_s3, get_lbls
 

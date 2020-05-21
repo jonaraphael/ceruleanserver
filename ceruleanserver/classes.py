@@ -2,7 +2,7 @@ import os
 import xmltodict
 from datetime import datetime
 import shapely.geometry as sh
-import config
+import configs.serverconfig as config
 import json
 import requests
 import shutil

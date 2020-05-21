@@ -1,6 +1,6 @@
 import psycopg2
 import pandas as pd
-import config
+import configs.serverconfig as config
 
 
 class DBConnection:
