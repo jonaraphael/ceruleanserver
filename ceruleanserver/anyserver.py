@@ -105,6 +105,5 @@ if __name__ in [
     db = DBConnection()  # Database Object
     ocean_shape = load_ocean_shape()  # Ocean Geometry
     learner = load_learner_from_s3()  # ML PKL
-
     # Start listening on the default port
     app.run(host=config.APP_HOST, debug=config.DEBUG)

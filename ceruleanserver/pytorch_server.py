@@ -3,29 +3,32 @@ def initialize(self, context):
        Initialize the model and auxiliary attributes.
     """
     super(PyTorchImageClassifier, self).initialize(context)
-    
+
     # Extract the model from checkpoint
-    checkpoint = torch.load(self.checkpoint_file_path, map_location='cpu')
-        self.model = checkpoint['model']
+    checkpoint = torch.load(self.checkpoint_file_path, map_location="cpu")
+    self.model = checkpoint["model"]
+
 
 def preprocess(self, data):
     """
        Preprocess the data, transform or convert to tensor, etc
     """
-        image = data[0].get("data")
-        if image is None:
-            image = data[0].get("body")
+    image = data[0].get("data")
+    if image is None:
+        image = data[0].get("body")
 
-        my_preprocess = transforms.Compose([
+    my_preprocess = transforms.Compose(
+        [
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                                 std=[0.229, 0.224, 0.225])
-        ])
-        image = Image.open(io.BytesIO(image))
-        image = my_preprocess(image)
-        return image 
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    image = Image.open(io.BytesIO(image))
+    image = my_preprocess(image)
+    return image
+
 
 def inference(self, image):
     """
@@ -39,19 +42,19 @@ def inference(self, image):
     self.model.eval()
     inputs = Variable(img).to(self.device)
     logits = self.model.forward(inputs)
-    
-    #Extract the top 5 species      
-    ps = F.softmax(logits,dim=1)
+
+    # Extract the top 5 species
+    ps = F.softmax(logits, dim=1)
     topk = ps.cpu().topk(5)
     probs, classes = (e.data.numpy().squeeze().tolist() for e in topk)
 
     # Formulate the result
     results = []
     for i in range(len(probs)):
-       tmp = dict()
-       tmp[self.mapping[str(classes[i])]] = probs[i]
-       results.append(tmp)
-    return [results]    
+        tmp = dict()
+        tmp[self.mapping[str(classes[i])]] = probs[i]
+        results.append(tmp)
+    return [results]
 
 
 # $ ls /tmp/model-store
