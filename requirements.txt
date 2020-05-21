@@ -6,3 +6,6 @@ requests
 pandas
 gdal
 pytest
+fastai2
+boto3
+PIL
