@@ -4,4 +4,4 @@ local_config.py
 log.txt
 aws_config.py
 modeltraining/data/*
-tests/data
+tests/test_fixtures

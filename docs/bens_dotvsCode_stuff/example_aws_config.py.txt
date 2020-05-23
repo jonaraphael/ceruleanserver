@@ -1,0 +1,6 @@
+ACCESS_KEY = "wahwooweewah"
+SECRET_KEY = "shhhhhhhhhhhh"
+S3_BUCKET_NAME = "skytruth-cerulean"
+SENTINEL_CHIPS_PATH = "labeled_data/chips"
+OCN_CHIPS_PATH = "labeled_data/ocn"
+MODELS_PATH = "model_artifacts"

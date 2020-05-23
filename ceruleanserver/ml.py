@@ -5,7 +5,7 @@ from osgeo import gdal
 from numpy import zeros, floor, ceil, uint8, where, array, dstack
 from PIL import Image as PILimage
 import shutil
-import configs.serverconfig as config
+import configs.server_config as config
 import os
 import csv
 
