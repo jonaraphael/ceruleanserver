@@ -7,6 +7,8 @@ import json
 import requests
 import shutil
 from pathlib import Path
+from errors import MissingProductError
+
 
 
 class SNSO:
@@ -25,46 +27,47 @@ class SNSO:
         self.s3 = {
             "bucket": f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/",
         }
-        self.grd_dir = Path(self.prod_id)
 
         # Placeholders
+        self.grd_path = None
         self.isoceanic = None
         self.oceanintersection = None
-        self.machinable = (
+        self.is_machinable = (
             self.is_highdef and self.is_vv
         )  # Later amended to include isoceanic
-
-        if self.is_vv:  # we don't want to process any polarization other than vv
-            self.s3[
-                "grd_tiff"
-            ] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
-            self.s3["grd_tiff_dest"] = self.grd_dir / "vv_grd.tiff"
-            self.s3[
-                "grd_tiff_download_str"
-            ] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
 
     def __repr__(self):
         return f"<SNSObject: {self.sns_msg['id']}>"
 
-    def download_grd_tiff(self):
+    def download_grd_tiff(self, grd_path=None):
         """Creates a local directory and downloads a GeoTiff (often ~700MB)
         """
         if config.VERBOSE:
-            print("Downloading GRD Tiff")
-        if not self.s3["grd_tiff"]:
-            print("ERROR No grd tiff found with VV polarization")
-            return False
-        else:
-            self.grd_dir.mkdir(exist_ok=True)
-            if not self.s3["grd_tiff_dest"].exists():
-                os.system(self.s3["grd_tiff_download_str"])
-            return self.s3["grd_tiff_dest"]
+            print("Downloading GRD")
+        if not self.is_vv:
+            raise MissingProductError(
+                product_id=self.prod_id,
+                message="ERROR: This GRD doesn't have VV polarization",
+            )  # we don't want to process any polarization other than vv
+
+        self.grd_path = grd_path or Path(self.prod_id) / "vv_grd.tiff"
+        self.s3[
+            "grd_tiff"
+        ] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
+        self.s3[
+            "grd_tiff_download_str"
+        ] = f'aws s3 cp {self.s3["grd_tiff"]} {self.grd_path} --request-payer'
+
+        self.grd_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.grd_path.exists():
+            os.system(self.s3["grd_tiff_download_str"])
+        return self.grd_path
 
     def cleanup(self):
         """Delete any local directory made to store the GRD
         """
-        if self.grd_dir.exists():
-            self.grd_dir.unlink()
+        if self.grd_path.parent.exists():
+            shutil.rmtree(self.grd_path.parent)
 
     def update_intersection(self, ocean_shape):
         """Calculate geometric intersections with the supplied geometry
@@ -78,7 +81,7 @@ class SNSO:
         self.oceanintersection = {
             k: sh.mapping(inter).get(k, v) for k, v in self.sns_msg["footprint"].items()
         }  # use msg[footprint] projection, and overwrite the intersection on top of the previous coordinates
-        self.machinable = self.machinable and self.isoceanic
+        self.is_machinable = self.is_machinable and self.isoceanic
 
     def sns_db_row(
         self,
@@ -123,28 +126,19 @@ class SHO:
         }
 
         # Placeholders
-        self.grd = {}
-        self.ocn = {}
-        self.grd_id = None
-        self.grd_shid = None
-        self.grd_dir = None
-        self.ocn_id = None
-        self.ocn_shid = None
-        self.ocn_dir = None
+        self.grd = self.ocn = {}
+        self.grd_id = self.grd_shid = self.grd_path = None
+        self.ocn_id = self.ocn_shid = self.ocn_path = None
 
         with requests.Session() as s:
             try:
                 p = s.post(self.URLs["query_prods"])
-            except Exception as e:
-                print("ERROR: scihub.copernicus.eu is down")
-                raise (e)
+            except requests.exceptions.ConnectionError as e:
+                print("Error connecting to SciHub")
+                raise e
             self.query_prods_res = xmltodict.parse(p.text)
 
-        if self.query_prods_res.get("feed").get("opensearch:totalResults") == "0":
-            # There are no products listed! https://app.asana.com/0/1170930608885369/1171069537674895
-            # The result is that the GRD data will be less complete
-            print(f"WARNING No SciHub results found matching {self.generic_id}")
-        else:
+        if self.query_prods_res.get("feed").get("opensearch:totalResults") != "0":
             prods = self.query_prods_res.get("feed").get("entry")
             if isinstance(prods, dict):
                 prods = [
@@ -156,16 +150,17 @@ class SHO:
 
             if self.grd:
                 self.grd_id = self.grd.get("title")
-                self.grd_dir = Path(self.grd_id)
                 self.grd_shid = self.grd.get("id")
+                self.is_vv = "VV" in xml_get(self.grd.get("str"), "polarisationmode")
 
             if self.ocn:
                 self.ocn_id = self.ocn.get("title")
-                self.ocn_dir = Path(self.ocn_id)
                 self.ocn_shid = self.ocn.get("id")
                 self.URLs[
                     "download_ocn"
                 ] = f"https://{user}:{pwd}@scihub.copernicus.eu/dhus/odata/v1/Products('{self.ocn_shid}')/%24value"
+        else:
+            pass  # There are no products listed! https://app.asana.com/0/1170930608885369/1171069537674895
 
     def __repr__(self):
         return f"<SciHubObject: {self.prod_id}>"
@@ -175,60 +170,68 @@ class SHO:
         """
         if config.VERBOSE:
             print("Downloading GRD")
-        if not self.grd:
-            print("ERROR No GRD found for this product ID")
-            return False
-        else:
-            self.s3 = {
-                "path": self.prod_id[7:10]
-                + "/"
-                + self.prod_id[17:21]
-                + "/"
-                + str(int(self.prod_id[21:23]))
-                + "/"
-                + str(int(self.prod_id[23:25]))
-                + "/"
-                + self.prod_id[4:6]
-                + "/"
-                + self.prod_id[14:16]
-                + "/"
-                + self.prod_id,
-            }
-            mode = f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'"
-            self.s3["bucket"] = f"s3://sentinel-s1-l1c/{self.s3['path']}/"
-            self.s3[
-                "grd_tiff"
-            ] = f"{self.s3['bucket']}measurement/{mode.lower()}-vv.tiff"
-            self.s3["grd_tiff_dest"] = grd_path or self.grd_dir / "vv_grd.tiff"
-            self.s3[
-                "grd_tiff_download_str"
-            ] = f'aws s3 cp {self.s3["grd_tiff"]} {self.s3["grd_tiff_dest"]} --request-payer'
-            self.grd_dir.mkdir(exist_ok=True)
-            if not self.s3["grd_tiff_dest"].exists():
-                os.system(self.s3["grd_tiff_download_str"])
-            return self.s3["grd_tiff_dest"]
+        if not (self.grd and self.is_vv):
+            raise MissingProductError(
+                product_id=self.prod_id,
+                message="ERROR: No VV-polarized GRD found for this product ID on Sinergise's S3 bucket",
+            )
+
+        self.grd_path = grd_path if grd_path else Path(self.prod_id) / "vv_grd.tiff"
+        self.s3 = {
+            "path": self.prod_id[7:10]
+            + "/"
+            + self.prod_id[17:21]
+            + "/"
+            + str(int(self.prod_id[21:23]))
+            + "/"
+            + str(int(self.prod_id[23:25]))
+            + "/"
+            + self.prod_id[4:6]
+            + "/"
+            + self.prod_id[14:16]
+            + "/"
+            + self.prod_id,
+        }
+        mode = f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'"
+        self.s3["bucket"] = f"s3://sentinel-s1-l1c/{self.s3['path']}/"
+        self.s3["grd_tiff"] = f"{self.s3['bucket']}measurement/{mode.lower()}-vv.tiff"
+        self.s3[
+            "grd_tiff_download_str"
+        ] = f'aws s3 cp {self.s3["grd_tiff"]} {self.grd_path} --request-payer'
+        self.grd_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.grd_path.exists():
+            os.system(self.s3["grd_tiff_download_str"])
+        return self.grd_path
 
     def download_ocn(self, ocn_path=None):
         """Create a local directory, and download an OCN zip file to it
         """
-        ocn_dest = ocn_path or self.ocn_dir / "ocn.zip"
         if config.VERBOSE:
             print("Downloading OCN")
         if not self.ocn:
-            print("ERROR No OCN found for this GRD")
-            return False
-        else:
-            ocn_dest.parent.mkdir(exist_ok=True)
-            with requests.Session() as s:
-                p = s.get(self.URLs.get("download_ocn"))
-                open(ocn_dest, "wb").write(p.content)
-            return ocn_dest
+            raise MissingProductError(
+                product_id=self.prod_id, message="ERROR: No OCN found for this GRD"
+            )
 
-    def cleanup(self):
-        """Delete any local directory made to store the OCN
+        self.ocn_path = ocn_path or Path(self.ocn_id) / "ocn.zip"
+        self.ocn_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.ocn_path.exists():
+            with requests.Session() as s:
+                try:
+                    p = s.get(self.URLs.get("download_ocn"))
+                except requests.exceptions.ConnectionError as e:
+                    print("Error connecting to SciHub")
+                    raise e
+                open(ocn_path, "wb").write(p.content)
+        return self.ocn_path
+
+    def cleanup(self, grd=True, ocn=True):
+        """Delete any local directory made to store the GRD and OCN
         """
-        if self.ocn_dir.exists():
-            self.ocn_dir.unlink()
+        if self.grd_path.parent.exists() and grd:
+            shutil.rmtree(self.grd_path.parent)
+        if self.ocn_path.parent.exists() and ocn:
+            shutil.rmtree(self.ocn_path.parent)
 
     def grd_db_row(self):
         """Creates a dictionary that aligns with our GRD DB columns
@@ -236,44 +239,44 @@ class SHO:
         Returns:
             dict -- key for each column in our GRD DB, value from SciHub's content
         """
-        tbl = "shgrd"
-        row = {}
-        if self.grd:  # SciHub has additional information
-            row.update(
-                {
-                    "summary": f"'{self.grd.get('summary')}'",
-                    "beginposition": f"{str_to_ts(xml_get(self.grd.get('date'),'beginposition'))}",
-                    "endposition": f"{str_to_ts(xml_get(self.grd.get('date'), 'endposition'))}",
-                    "ingestiondate": f"{str_to_ts(xml_get(self.grd.get('date'), 'ingestiondate'))}",
-                    "missiondatatakeid": f"{int(xml_get(self.grd.get('int'), 'missiondatatakeid'))}",
-                    "orbitnumber": f"{int(xml_get(self.grd.get('int'), 'orbitnumber'))}",
-                    "lastorbitnumber": f"{int(xml_get(self.grd.get('int'), 'lastorbitnumber'))}",
-                    "relativeorbitnumber": f"{int(xml_get(self.grd.get('int'), 'relativeorbitnumber'))}",
-                    "lastrelativeorbitnumber": f"{int(xml_get(self.grd.get('int'), 'lastrelativeorbitnumber'))}",
-                    "sensoroperationalmode": f"'{xml_get(self.grd.get('str'), 'sensoroperationalmode')}'",
-                    "swathidentifier": f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'",
-                    "orbitdirection": f"'{xml_get(self.grd.get('str'), 'orbitdirection')}'",
-                    "producttype": f"'{xml_get(self.grd.get('str'), 'producttype')}'",
-                    "timeliness": f"'{xml_get(self.grd.get('str'), 'timeliness')}'",
-                    "platformname": f"'{xml_get(self.grd.get('str'), 'platformname')}'",
-                    "platformidentifier": f"'{xml_get(self.grd.get('str'), 'platformidentifier')}'",
-                    "instrumentname": f"'{xml_get(self.grd.get('str'), 'instrumentname')}'",
-                    "instrumentshortname": f"'{xml_get(self.grd.get('str'), 'instrumentshortname')}'",
-                    "filename": f"'{xml_get(self.grd.get('str'), 'filename')}'",
-                    "format": f"'{xml_get(self.grd.get('str'), 'format')}'",
-                    "productclass": f"'{xml_get(self.grd.get('str'), 'productclass')}'",
-                    "polarisationmode": f"'{xml_get(self.grd.get('str'), 'polarisationmode')}'",
-                    "acquisitiontype": f"'{xml_get(self.grd.get('str'), 'acquisitiontype')}'",
-                    "status": f"'{xml_get(self.grd.get('str'), 'status')}'",
-                    "size": f"'{xml_get(self.grd.get('str'), 'size')}'",
-                    "footprint": f"'{xml_get(self.grd.get('str'), 'footprint')}'",
-                    "identifier": f"'{self.grd_id}'",
-                    "uuid": f"'{self.grd_shid}'",  # Foreign Key
-                    "ocn_uuid": f"'{self.ocn_shid}'"
-                    if self.ocn
-                    else "null",  # Foreign Key
-                }
+        if not self.grd:
+            raise MissingProductError(
+                product_id=self.prod_id,
+                message="ERROR: No GRD found for this product ID",
             )
+
+        tbl = "shgrd"
+        row = {
+            "summary": f"'{self.grd.get('summary')}'",
+            "beginposition": f"{str_to_ts(xml_get(self.grd.get('date'),'beginposition'))}",
+            "endposition": f"{str_to_ts(xml_get(self.grd.get('date'), 'endposition'))}",
+            "ingestiondate": f"{str_to_ts(xml_get(self.grd.get('date'), 'ingestiondate'))}",
+            "missiondatatakeid": f"{int(xml_get(self.grd.get('int'), 'missiondatatakeid'))}",
+            "orbitnumber": f"{int(xml_get(self.grd.get('int'), 'orbitnumber'))}",
+            "lastorbitnumber": f"{int(xml_get(self.grd.get('int'), 'lastorbitnumber'))}",
+            "relativeorbitnumber": f"{int(xml_get(self.grd.get('int'), 'relativeorbitnumber'))}",
+            "lastrelativeorbitnumber": f"{int(xml_get(self.grd.get('int'), 'lastrelativeorbitnumber'))}",
+            "sensoroperationalmode": f"'{xml_get(self.grd.get('str'), 'sensoroperationalmode')}'",
+            "swathidentifier": f"'{xml_get(self.grd.get('str'), 'swathidentifier')}'",
+            "orbitdirection": f"'{xml_get(self.grd.get('str'), 'orbitdirection')}'",
+            "producttype": f"'{xml_get(self.grd.get('str'), 'producttype')}'",
+            "timeliness": f"'{xml_get(self.grd.get('str'), 'timeliness')}'",
+            "platformname": f"'{xml_get(self.grd.get('str'), 'platformname')}'",
+            "platformidentifier": f"'{xml_get(self.grd.get('str'), 'platformidentifier')}'",
+            "instrumentname": f"'{xml_get(self.grd.get('str'), 'instrumentname')}'",
+            "instrumentshortname": f"'{xml_get(self.grd.get('str'), 'instrumentshortname')}'",
+            "filename": f"'{xml_get(self.grd.get('str'), 'filename')}'",
+            "format": f"'{xml_get(self.grd.get('str'), 'format')}'",
+            "productclass": f"'{xml_get(self.grd.get('str'), 'productclass')}'",
+            "polarisationmode": f"'{xml_get(self.grd.get('str'), 'polarisationmode')}'",
+            "acquisitiontype": f"'{xml_get(self.grd.get('str'), 'acquisitiontype')}'",
+            "status": f"'{xml_get(self.grd.get('str'), 'status')}'",
+            "size": f"'{xml_get(self.grd.get('str'), 'size')}'",
+            "footprint": f"'{xml_get(self.grd.get('str'), 'footprint')}'",
+            "identifier": f"'{self.grd_id}'",
+            "uuid": f"'{self.grd_shid}'",  # Foreign Key
+            "ocn_uuid": f"'{self.ocn_shid}'" if self.ocn else "null",  # Foreign Key
+        }
         return (row, tbl)
 
     def ocn_db_row(self):
@@ -282,20 +285,22 @@ class SHO:
         Returns:
             dict -- key for each column in our OCN DB, value from SciHub's content
         """
-        tbl = "shocn"
-        row = {}
-        if self.ocn:
-            row.update(
-                {
-                    "uuid": f"'{self.ocn_shid}'",
-                    "identifier": f"'{self.ocn_id}'",
-                    "summary": f"'{self.ocn.get('summary')}'",
-                    "producttype": f"'{xml_get(self.ocn.get('str'), 'producttype')}'",
-                    "filename": f"'{xml_get(self.ocn.get('str'), 'filename')}'",
-                    "size": f"'{xml_get(self.ocn.get('str'), 'size')}'",
-                    "grd_uuid": f"'{self.grd_shid}'",  # Foreign Key
-                }
+        if not self.ocn:
+            raise MissingProductError(
+                product_id=self.prod_id,
+                message="ERROR: No OCN found for this product ID",
             )
+
+        tbl = "shocn"
+        row = {
+            "uuid": f"'{self.ocn_shid}'",
+            "identifier": f"'{self.ocn_id}'",
+            "summary": f"'{self.ocn.get('summary')}'",
+            "producttype": f"'{xml_get(self.ocn.get('str'), 'producttype')}'",
+            "filename": f"'{xml_get(self.ocn.get('str'), 'filename')}'",
+            "size": f"'{xml_get(self.ocn.get('str'), 'size')}'",
+            "grd_uuid": f"'{self.grd_shid}'",  # Foreign Key
+        }
         return (row, tbl)
 
 

@@ -24,46 +24,51 @@ path = Path(".")  # Set the location where the chips will be stored
 chp_dir = path / "training/chp"
 for pid in set(prods):
     img_path = path / pid / "vv_grd.tiff"
-    SHO(pid).download_grd_tiff_from_s3(img_path)
-    mask_path = path / pid / "hand_edited_mask.png"
-    gdal.Translate(
-        str(mask_path),
-        str(img_path),
-        widthPct=chip_size_reduced / chip_size_orig * 100,
-        heightPct=chip_size_reduced / chip_size_orig * 100,
-        outputType=gdal.GDT_Byte,
-    )  # Save a copy with reduced resolution while we have the file open!
-    img_to_chips(
-        img_path,
-        chp_dir,
-        chip_size_orig,
-        chip_size_reduced,
-        pid,
-        overhang,
-        max_chip_qty,
-        start_over,
-    )
-    if cleanup:
-        img_path.unlink()  # Delete the huge GRD # pylint: disable=no-member
+    sho = SHO(pid)
+    if sho.grd:
+        sho.download_grd_tiff_from_s3(img_path)
+        mask_path = path / pid / "hand_edited_mask.png"
+        gdal.Translate(
+            str(mask_path),
+            str(img_path),
+            widthPct=chip_size_reduced / chip_size_orig * 100,
+            heightPct=chip_size_reduced / chip_size_orig * 100,
+            outputType=gdal.GDT_Byte,
+        )  # Save a copy with reduced resolution while we have the file open!
+        img_to_chips(
+            img_path,
+            chp_dir,
+            chip_size_orig,
+            chip_size_reduced,
+            pid,
+            overhang,
+            max_chip_qty,
+            start_over,
+        )
+        if cleanup:
+            img_path.unlink()  # Delete the huge GRD # pylint: disable=no-member
 
 #%%  Make chips from a handmade mask
 # XXX Before running this block, you must edit hand_edited_mask.png in photoshop to create a [0,1] mask
 chp_dir = path / "training/lbl"
 for pid in set(prods):
     img_path = path / pid / "hand_edited_mask.png"
-    img_to_chips(
-        img_path,
-        chp_dir,
-        chip_size_reduced,
-        chip_size_reduced,
-        pid,
-        overhang,
-        max_chip_qty,
-        start_over,
-        True,
-    )
-    if cleanup:
-        shutil.rmtree(str(img_path.parent))  # Remove the folder holding the raw files
+    if img_path.exists():
+        img_to_chips(
+            img_path,
+            chp_dir,
+            chip_size_reduced,
+            chip_size_reduced,
+            pid,
+            overhang,
+            max_chip_qty,
+            start_over,
+            True,
+        )
+        if cleanup:
+            shutil.rmtree(
+                str(img_path.parent)
+            )  # Remove the folder holding the raw files
 
 #%% Make chips from an OCN
 bands = {  # from https://sentinel.esa.int/web/sentinel/ocean-wind-field-component
@@ -85,22 +90,20 @@ bands = {  # from https://sentinel.esa.int/web/sentinel/ocean-wind-field-compone
 chp_dir = path / "training/ocn"
 for pid in set(prods):
     sho = SHO(pid)
+    if sho.grd and sho.ocn:
+        # This section is just to get the target size that the OCN should be
+        img_path = path / pid / "vv_grd.tiff"
+        sho.download_grd_tiff_from_s3(img_path)
+        grd = gdal.Open(str(img_path))
+        target_size = (
+            int(chip_size_reduced / chip_size_orig * grd.RasterXSize),
+            int(chip_size_reduced / chip_size_orig * grd.RasterYSize),
+        )
+        del grd
 
-    # This section is just to get the target size that the OCN should be
-    img_path = path / pid / "vv_grd.tiff"
-    sho.download_grd_tiff_from_s3(img_path)
-    grd = gdal.Open(str(img_path))
-    target_size = (
-        int(chip_size_reduced / chip_size_orig * grd.RasterXSize),
-        int(chip_size_reduced / chip_size_orig * grd.RasterYSize),
-    )
-    del grd
-
-    # This section downloads, scales, and chops up the OCN
-    ocnzip_path = path / pid / "ocn.zip"
-    if sho.download_ocn(
-        ocnzip_path
-    ):  # This will print an error and return False if no OCN is found
+        # This section downloads, scales, and chops up the OCN
+        ocnzip_path = path / pid / "ocn.zip"
+        sho.download_ocn(ocnzip_path)
         with zipfile.ZipFile(ocnzip_path, "r") as zip_ref:
             zip_ref.extractall(ocnzip_path.parent)
         nc_path = next(

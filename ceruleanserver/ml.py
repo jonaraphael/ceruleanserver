@@ -28,7 +28,7 @@ def machine(learner, snso):
     img_path = snso.s3["grd_tiff_dest"]  # Where the new image is
     inf_dir = img_path.parent / "inf"  # Where the inference chips should be stored
     merged_path = (
-        img_path.parent / "merged.tif"
+        img_path.parent / "merged.tiff"
     )  # Where the merged inference mask should be stored
 
     # Download Large GeoTiff
@@ -140,11 +140,6 @@ def img_to_chips(
         mllearner {fastai2_learner} -- The loaded learner if doing inference, else None (default: {None})
         threshold {float} -- The level of confidence to split inference into binary. If None, then outputs grayscale (default: {None})
     """
-    if not img_path.exists():  # pylint: disable=no-member
-        print(
-            "ERROR: No image found:", img_path
-        )  # We need an image if you want to chip it
-        return
     if config.VERBOSE:
         print("Chipping", img_path.name, "into", out_dir)
     out_dir.mkdir(
@@ -222,14 +217,14 @@ def infer(png_path, learner, threshold=None):
     mask = where(pred_class[1] > threshold, 1, 0) if threshold else pred_class[1]
     PILimage.fromarray(uint8(mask * 255)).save(png_path)
     gdal.Warp(
-        destNameOrDestDS=str(png_path.with_suffix(".tif")),
+        destNameOrDestDS=str(png_path.with_suffix(".tiff")),
         srcDSOrSrcDSTab=str(png_path),
         srcNodata=0,
         dstNodata=0,
         format="GTiff",
     )
 
-    # gdal.Translate(str(png_path.with_suffix('.tif')), str(png_path), format="GTiff")
+    # gdal.Translate(str(png_path.with_suffix('.tiff')), str(png_path), format="GTiff")
 
     # tif = gdal.Open(str(png_path), gdal.GA_Update)
     # outBand = tif.GetRasterBand(1)
@@ -239,15 +234,15 @@ def infer(png_path, learner, threshold=None):
     # del tif
 
 
-def merge_chips(chp_dir, merged_path, chip_ext="tif"):
-    """Merge multiple chips into one large tif
+def merge_chips(chp_dir, merged_path, chip_ext="tiff"):
+    """Merge multiple chips into one large tiff
     
     Arguments:
         chp_dir {Path} -- Folder where multiple PNGs are stored
         merged_path {Path} -- File where the merged TIF will be generated
 
     Keyword Arguments:
-        chip_ext {str} -- The file extension of the chips to be merged (default: {"tif"})
+        chip_ext {str} -- The file extension of the chips to be merged (default: {"tiff"})
     """
     if config.VERBOSE:
         print("Merging Masks")
@@ -261,20 +256,20 @@ def merge_chips(chp_dir, merged_path, chip_ext="tif"):
     shutil.rmtree(chp_dir)
 
 
-def scale(b, arr):
+def scale(band, arr):
     """Scale OCN bands by their mins/maxes
 
     Arguments:
-        b {dict} -- A dictionary that contains 4 floats: min, max, no_data_in, no_data_out
+        band {dict} -- A dictionary that contains 4 floats: min, max, no_data_in, no_data_out
         arr {np.array} -- A 2D matrix of numbers representing the corresponding raw band from an OCN
 
     Returns:
         np.array -- A 2D matrix representing a scaled version of the input array
     """
-    no_data = where(arr == b["no_data_in"])
-    res = 255 * ((arr - b["min"]) / (b["max"] - b["min"]))
-    res[no_data] = b["no_data_out"]
-    res = array([[uint8(a) for a in b] for b in res])
+    no_data = where(arr == band["no_data_in"])
+    res = 255 * ((arr - band["min"]) / (band["max"] - band["min"]))
+    res[no_data] = band["no_data_out"]
+    res = array([[uint8(x) for x in y] for y in res])
     return res
 
 
@@ -313,23 +308,24 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
     return out_path  # Return the path of the new file
 
 
-def load_learner_from_s3():
+def load_learner_from_s3(pkl_path=Path("./models/ml.pkl")):
     """Import the latest trained model from S3
 
+    Keyword Arguments:
+        pkl_path {Path} -- Location to store the pickled model (default: {Path('./temp/ml.pkl')})
+
     Returns:
-        Learner -- fastai2 trained model loaded into memory
+        fastai2_learner -- A learner with the model already loaded in
     """
     if config.VERBOSE:
         print("Loading Learner")
-    pkl_name = "ml.pkl"
-    pkl_dir = Path("./temp/")
-    if config.UPDATE_ML and (pkl_dir / pkl_name).exists():
-        (pkl_dir / pkl_name).unlink()  # pylint: disable=no-member
-    if not (pkl_dir / pkl_name).exists():  # pylint: disable=no-member
-        download_str = f"aws s3 cp {config.ML_PKL} {pkl_dir/pkl_name}"
+    if config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
+        pkl_path.unlink()  # pylint: disable=no-member
+    if not pkl_path.exists():  # pylint: disable=no-member
+        download_str = f"aws s3 cp {config.ML_PKL} {pkl_path}"
         # print(download_str)
         os.system(download_str)
-    l = load_learner(pkl_dir / pkl_name)
+    l = load_learner(pkl_path)
     return l
 
 
