@@ -12,13 +12,13 @@ from configs import aws_config, server_config
 
 
 def get_s3_bucket(
-    bucket_name,
+    bucket_name: str = aws_config.S3_BUCKET_NAME,
     aws_access_key_id: str = aws_config.ACCESS_KEY,
     aws_secret_access_key: str = aws_config.SECRET_KEY,
 ):
     session = boto3.Session(aws_access_key_id, aws_secret_access_key)
     s3_resource = session.resource("s3")
-    return s3_resource.Bucket(aws_config.S3_BUCKET_NAME)
+    return s3_resource.Bucket(bucket_name)
 
 
 def download_prefix(

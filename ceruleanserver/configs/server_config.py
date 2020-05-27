@@ -24,7 +24,8 @@ SH_USER = "jonaraph"
 SH_PWD = "fjjEwvMDHyJH9Fa"
 
 # ML Settings
-ML_PKL = "s3://skytruth-cerulean/model_artifacts/18_512_0.722.pkl"
+MODEL_DWNLD_DIR = "./temp/ml.pkl"
+AWS_CLI = True
 UPDATE_ML = True
 RUN_ML = True
 CLEANUP_SNS = True
@@ -32,4 +33,3 @@ CLEANUP_SNS = True
 # If the local_config module is found, import all those settings, overriding any here that overlap.
 if importlib.util.find_spec("local_config") is not None:
     from local_config import *  # pylint: disable=unused-wildcard-import
-

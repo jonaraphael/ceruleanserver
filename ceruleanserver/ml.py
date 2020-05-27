@@ -5,9 +5,11 @@ from osgeo import gdal
 from numpy import zeros, floor, ceil, uint8, where, array, dstack
 from PIL import Image as PILimage
 import shutil
-import configs.server_config as config
+from configs import server_config as config, aws_config
 import os
 import csv
+from utils import s3
+from typing import Union
 
 
 def machine(learner, snso):
@@ -56,7 +58,7 @@ def machine(learner, snso):
 
 
 def crop_box_gen(
-    px_wide, px_high, chip_size, geo_transform=(0, 1, 0, 0, 0, 1), overhang=False
+    px_wide, px_high, chip_size, geo_transform=(0, 1, 0, 0, 0, 1), overhang= False
 ):
     """A generator that will sequentially return bounding corners of boxes to chop up a larger image into small ones
     
@@ -308,23 +310,28 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
     return out_path  # Return the path of the new file
 
 
-def load_learner_from_s3(pkl_path=Path("./models/ml.pkl")):
+def load_learner_from_s3(pkl_path: Union[Path, str] = config.MODEL_DWNLD_DIR):
     """Import the latest trained model from S3
 
     Keyword Arguments:
-        pkl_path {Path} -- Location to store the pickled model (default: {Path('./temp/ml.pkl')})
+        pkl_path {Path} -- Location to store the pickled model. Default from config
 
     Returns:
         fastai2_learner -- A learner with the model already loaded in
     """
+    pkl_path = Path(pkl_path)
     if config.VERBOSE:
         print("Loading Learner")
     if config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
         pkl_path.unlink()  # pylint: disable=no-member
     if not pkl_path.exists():  # pylint: disable=no-member
-        download_str = f"aws s3 cp {config.ML_PKL} {pkl_path}"
-        # print(download_str)
-        os.system(download_str)
+        if config.AWS_CLI:
+            download_str = f"aws s3 cp {aws_config.S3_MODEL_FULL_PATH} {pkl_path}"
+            # print(download_str)
+            os.system(download_str)
+        else:
+            bucket = s3.get_s3_bucket()
+            s3.download_prefix(bucket, pkl_path, f"{aws_config.S3_MODELS_PATH}/{aws_config.S3_MODEL_NAME}")
     l = load_learner(pkl_path)
     return l
 
