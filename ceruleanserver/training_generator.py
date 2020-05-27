@@ -3,7 +3,7 @@ from osgeo import gdal
 from pathlib import Path
 import config
 from classes import SHO
-from ml import crop_box_gen, img_to_chips, nc_to_png
+from ml.inference import crop_box_gen, img_to_chips, nc_to_png
 import shutil
 import zipfile
 

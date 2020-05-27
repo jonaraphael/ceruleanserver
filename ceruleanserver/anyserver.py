@@ -5,7 +5,8 @@ import shapely.geometry as sh
 from data import DBConnection
 import configs.server_config as config
 from classes import SHO, SNSO
-from ml import machine, load_learner_from_s3, get_lbls
+from ml.inference import machine, load_learner_from_s3, get_lbls
+from configs import path_config
 
 # Create app
 app = Flask(__name__)
@@ -17,7 +18,7 @@ def load_ocean_shape():
     Returns:
         [Geometry] -- A Shapely geometry produced from a GeoJSON
     """
-    with open("OceanGeoJSON_lowres.geojson") as f:
+    with open(path_config.LOCAL_DIR + "aux_files/OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
     return sh.GeometryCollection(
         [sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features]

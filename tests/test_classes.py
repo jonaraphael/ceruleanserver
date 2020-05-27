@@ -5,12 +5,11 @@ import os
 import json
 import shutil
 from pathlib import Path
-
-dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f"{dir_path}/../ceruleanserver")
-import ceruleanserver.classes as classes
-
 import shapely.geometry as sh
+
+sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
+import classes
+from configs import testing_config, path_config  # pylint: disable=import-error
 
 
 @pytest.fixture  # This means treat the following as an object (instead of a function)
@@ -48,7 +47,7 @@ def mock_sns(mock_GET_body):
 
 @pytest.fixture
 def ocean_geojson():
-    with open("OceanGeoJSON_lowres.geojson") as f:
+    with open(path_config.LOCAL_DIR + "aux_files/OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
     ocean = sh.GeometryCollection(
         [sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features]
@@ -58,36 +57,50 @@ def ocean_geojson():
 
 @pytest.fixture
 def FILE_grd_path():
-    perm_grd = Path(
-        "tests/test_files_perm/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/vv_grd.tiff"
+    test_dir = (
+        Path(path_config.LOCAL_DIR)
+        / testing_config.TESTDATA_FOLDER
+        / testing_config.TESTDATA_VERSION
     )
-    temp_grd = Path(
-        "tests/test_files_temp/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/vv_grd.tiff"
+    perm_grd = (
+        test_dir
+        / "perm/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/vv_grd.tiff"
     )
-    if temp_grd.exists():
-        temp_grd.unlink()
-    temp_grd.parent.mkdir(parents=True, exist_ok=True)
+    temp_grd = (
+        test_dir
+        / "temp/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/vv_grd.tiff"
+    )
+    if temp_grd.exists():  # pylint: disable=no-member
+        temp_grd.unlink()  # pylint: disable=no-member
+    temp_grd.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_grd), str(temp_grd))
     yield temp_grd
-    if temp_grd.exists():
-        temp_grd.unlink()
+    if temp_grd.exists():  # pylint: disable=no-member
+        temp_grd.unlink()  # pylint: disable=no-member
 
 
 @pytest.fixture
 def FILE_ocn_path():
-    perm_ocn = Path(
-        "tests/test_files_perm/S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913/ocn.zip"
+    test_dir = (
+        Path(path_config.LOCAL_DIR)
+        / testing_config.TESTDATA_FOLDER
+        / testing_config.TESTDATA_VERSION
     )
-    temp_ocn = Path(
-        "tests/test_files_temp/S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913/ocn.zip"
+    perm_ocn = (
+        test_dir
+        / "perm/S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913/ocn.zip"
     )
-    if temp_ocn.exists():
-        temp_ocn.unlink()
-    temp_ocn.parent.mkdir(parents=True, exist_ok=True)
+    temp_ocn = (
+        test_dir
+        / "temp/S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913/ocn.zip"
+    )
+    if temp_ocn.exists():  # pylint: disable=no-member
+        temp_ocn.unlink()  # pylint: disable=no-member
+    temp_ocn.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_ocn), str(temp_ocn))
     yield temp_ocn
-    if temp_ocn.exists():
-        temp_ocn.unlink()
+    if temp_ocn.exists():  # pylint: disable=no-member
+        temp_ocn.unlink()  # pylint: disable=no-member
 
 
 #%% Test SNSO

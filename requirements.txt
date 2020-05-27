@@ -6,3 +6,4 @@ requests
 pandas
 gdal
 pytest
+boto3

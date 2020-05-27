@@ -6,27 +6,32 @@ import json
 import shutil
 from pathlib import Path
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(f"{dir_path}/../ceruleanserver")
-import ceruleanserver.ml as ml
+sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
+from ml import inference  # pylint: disable=import-error
+from configs import testing_config, path_config  # pylint: disable=import-error
 
 
 @pytest.fixture
 def FILE_ml_pkl():
-    perm_pkl = Path("tests/test_files_perm/models/ml.pkl")
-    temp_pkl = Path("tests/test_files_temp/models/ml.pkl")
-    if temp_pkl.exists():
-        temp_pkl.unlink()
-    temp_pkl.parent.mkdir(parents=True, exist_ok=True)
+    test_dir = (
+        Path(path_config.LOCAL_DIR)
+        / testing_config.TESTDATA_FOLDER
+        / testing_config.TESTDATA_VERSION
+    )
+    perm_pkl = test_dir / "perm/models/ml.pkl"
+    temp_pkl = test_dir / "temp/models/ml.pkl"
+    if temp_pkl.exists():  # pylint: disable=no-member
+        temp_pkl.unlink()  # pylint: disable=no-member
+    temp_pkl.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_pkl), str(temp_pkl))
     yield temp_pkl
-    if temp_pkl.exists():
-        temp_pkl.unlink()
+    if temp_pkl.exists():  # pylint: disable=no-member
+        temp_pkl.unlink()  # pylint: disable=no-member
 
 
 def test_load_learner(FILE_ml_pkl):
-    def get_lbls():
+    def get_lbls():  # pylint: disable=unused-variable
         return
 
-    learner = ml.load_learner_from_s3(FILE_ml_pkl)
+    learner = inference.load_learner_from_s3(FILE_ml_pkl)
     assert learner == ""

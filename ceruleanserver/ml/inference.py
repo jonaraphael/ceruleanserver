@@ -5,9 +5,12 @@ from osgeo import gdal
 from numpy import zeros, floor, ceil, uint8, where, array, dstack
 from PIL import Image as PILimage
 import shutil
-import configs.server_config as config
 import os
 import csv
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent))
+from configs import server_config, path_config  # pylint: disable=import-error
 
 
 def machine(learner, snso):
@@ -73,7 +76,7 @@ def crop_box_gen(
     """
     num_wide = int(ceil(px_wide / chip_size))
     num_high = int(ceil(px_high / chip_size))
-    if config.VERBOSE:
+    if server_config.VERBOSE:
         print("Creating", num_wide * num_high, "Chips")
 
     for i in range(num_wide):
@@ -140,7 +143,7 @@ def img_to_chips(
         mllearner {fastai2_learner} -- The loaded learner if doing inference, else None (default: {None})
         threshold {float} -- The level of confidence to split inference into binary. If None, then outputs grayscale (default: {None})
     """
-    if config.VERBOSE:
+    if server_config.VERBOSE:
         print("Chipping", img_path.name, "into", out_dir)
     out_dir.mkdir(
         parents=True, exist_ok=True
@@ -194,7 +197,7 @@ def img_to_chips(
                                 [out_path.name]
                             )  # Record the chip name
                     del chp  # Remove the chip from memory
-        if config.VERBOSE:
+        if server_config.VERBOSE:
             print(
                 out_path.stem, (datetime.now() - s) / (i + 1)
             )  # Inference around 6.7s per 512px chip
@@ -244,7 +247,7 @@ def merge_chips(chp_dir, merged_path, chip_ext="tiff"):
     Keyword Arguments:
         chip_ext {str} -- The file extension of the chips to be merged (default: {"tiff"})
     """
-    if config.VERBOSE:
+    if server_config.VERBOSE:
         print("Merging Masks")
     if (merged_path).exists():
         (
@@ -308,21 +311,21 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
     return out_path  # Return the path of the new file
 
 
-def load_learner_from_s3(pkl_path=Path("./models/ml.pkl")):
+def load_learner_from_s3(pkl_path=Path(path_config.LOCAL_DIR + "models/ml.pkl")):
     """Import the latest trained model from S3
 
     Keyword Arguments:
-        pkl_path {Path} -- Location to store the pickled model (default: {Path('./temp/ml.pkl')})
+        pkl_path {Path} -- Location to store the pickled model (default: {Path(path_config.LOCAL_DIR+"models/ml.pkl")})
 
     Returns:
         fastai2_learner -- A learner with the model already loaded in
     """
-    if config.VERBOSE:
+    if server_config.VERBOSE:
         print("Loading Learner")
-    if config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
+    if server_config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
         pkl_path.unlink()  # pylint: disable=no-member
     if not pkl_path.exists():  # pylint: disable=no-member
-        download_str = f"aws s3 cp {config.ML_PKL} {pkl_path}"
+        download_str = f"aws s3 cp {server_config.ML_PKL} {pkl_path}"
         # print(download_str)
         os.system(download_str)
     l = load_learner(pkl_path)

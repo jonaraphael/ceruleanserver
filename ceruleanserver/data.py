@@ -1,6 +1,6 @@
 import psycopg2
 import pandas as pd
-import configs.server_config as config
+from configs import server_config
 
 
 class DBConnection:
@@ -9,11 +9,11 @@ class DBConnection:
 
     def __init__(
         self,
-        host=config.DB_HOST,
-        user=config.DB_USER,
-        password=config.DB_PASSWORD,
-        database=config.DB_DATABASE,
-        port=config.DB_PORT,
+        host=server_config.DB_HOST,
+        user=server_config.DB_USER,
+        password=server_config.DB_PASSWORD,
+        database=server_config.DB_DATABASE,
+        port=server_config.DB_PORT,
     ):
         self.host = host
         self.user = user
@@ -46,10 +46,10 @@ class DBConnection:
         Arguments:
             command {str} -- any SQL query to be run on the DB
         """
-        if config.DEBUG and not config.DEBUG_DB_ACCESS:
+        if server_config.DEBUG and not server_config.DEBUG_DB_ACCESS:
             pass
         else:
-            if config.VERBOSE:
+            if server_config.VERBOSE:
                 print("Running SQL: ", command)
             self.cur.execute(command)
 
@@ -86,7 +86,7 @@ class DBConnection:
             dct {dict} -- a dictionary with keys for any columns to be added
             tbl {str} -- name of the table to be added to
         """
-        if config.VERBOSE:
+        if server_config.VERBOSE:
             print("Inserting into: ", tbl)
         keys, values = zip(*dct.items())
         cmd = f"""
@@ -97,8 +97,8 @@ class DBConnection:
         self.open()
         try:
             self.execute(cmd)
-            if config.VERBOSE:
-                if config.DEBUG_DB_ACCESS:
+            if server_config.VERBOSE:
+                if server_config.DEBUG_DB_ACCESS:
                     print(f"writing to table {tbl}")
                 else:
                     print(f"DB access turned off; would write to table {tbl}")

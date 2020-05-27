@@ -2,13 +2,12 @@ import os
 import xmltodict
 from datetime import datetime
 import shapely.geometry as sh
-import configs.server_config as config
+from configs import server_config
 import json
 import requests
 import shutil
 from pathlib import Path
 from errors import MissingProductError
-
 
 
 class SNSO:
@@ -42,7 +41,7 @@ class SNSO:
     def download_grd_tiff(self, grd_path=None):
         """Creates a local directory and downloads a GeoTiff (often ~700MB)
         """
-        if config.VERBOSE:
+        if server_config.VERBOSE:
             print("Downloading GRD")
         if not self.is_vv:
             raise MissingProductError(
@@ -118,7 +117,7 @@ class SHO:
     """A class that organizes information about content stored on SciHub
     """
 
-    def __init__(self, prod_id, user=config.SH_USER, pwd=config.SH_PWD):
+    def __init__(self, prod_id, user=server_config.SH_USER, pwd=server_config.SH_PWD):
         self.prod_id = prod_id
         self.generic_id = self.prod_id[:7] + "????_?" + self.prod_id[13:-4] + "*"
         self.URLs = {
@@ -168,7 +167,7 @@ class SHO:
     def download_grd_tiff_from_s3(self, grd_path=None):
         """Create a local directory, and download a GRD file to it if it exists in Sinergise's archives
         """
-        if config.VERBOSE:
+        if server_config.VERBOSE:
             print("Downloading GRD")
         if not (self.grd and self.is_vv):
             raise MissingProductError(
@@ -206,7 +205,7 @@ class SHO:
     def download_ocn(self, ocn_path=None):
         """Create a local directory, and download an OCN zip file to it
         """
-        if config.VERBOSE:
+        if server_config.VERBOSE:
             print("Downloading OCN")
         if not self.ocn:
             raise MissingProductError(

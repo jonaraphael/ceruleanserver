@@ -5,3 +5,4 @@ log.txt
 aws_config.py
 modeltraining/data/*
 tests/test_fixtures
+local/
