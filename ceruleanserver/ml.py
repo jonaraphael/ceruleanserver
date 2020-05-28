@@ -310,7 +310,7 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
     return out_path  # Return the path of the new file
 
 
-def load_learner_from_s3(pkl_path: Union[Path, str] = config.MODEL_DWNLD_DIR):
+def load_learner_from_s3(pkl_dir: Union[Path, str] = config.MODEL_DWNLD_DIR):
     """Import the latest trained model from S3
 
     Keyword Arguments:
@@ -319,21 +319,21 @@ def load_learner_from_s3(pkl_path: Union[Path, str] = config.MODEL_DWNLD_DIR):
     Returns:
         fastai2_learner -- A learner with the model already loaded in
     """
-    pkl_path = Path(pkl_path)
+    pkl_dir = Path(pkl_dir)
+    pkl_path = pkl_dir / aws_config.S3_MODEL_NAME
     if config.VERBOSE:
         print("Loading Learner")
     if config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
         pkl_path.unlink()  # pylint: disable=no-member
     if not pkl_path.exists():  # pylint: disable=no-member
         if config.AWS_CLI:
-            download_str = f"aws s3 cp {aws_config.S3_MODEL_FULL_PATH} {pkl_path}"
+            download_str = f"aws s3 cp {aws_config.S3_MODEL_FULL_PATH} {str(pkl_path)}"
             # print(download_str)
             os.system(download_str)
         else:
             bucket = s3.get_s3_bucket()
-            s3.download_prefix(bucket, pkl_path, f"{aws_config.S3_MODELS_PATH}/{aws_config.S3_MODEL_NAME}")
-    l = load_learner(pkl_path)
-    return l
+            s3.download_prefix(bucket, pkl_dir, f"{aws_config.S3_MODELS_PATH}/{aws_config.S3_MODEL_NAME}")
+    return load_learner(pkl_path)
 
 
 def get_lbls():

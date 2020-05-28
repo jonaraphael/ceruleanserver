@@ -3,5 +3,6 @@ local_config.py
 .vscode
 log.txt
 aws_credentials.py
-modeltraining/data/*
+modeltraining/data
 tests/test_fixtures
+test_files_temp

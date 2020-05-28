@@ -10,5 +10,5 @@ S3_MODEL_FULL_PATH = f"s3://{S3_BUCKET_NAME}/{S3_MODELS_PATH}/{S3_MODEL_NAME}"
 
 # Import credentials from gitignored file
 import importlib
-if importlib.util.find_spec("aws_credentials") is not None:
-    from aws_credentials import *  # pylint: disable=unused-wildcard-import
+if importlib.util.find_spec("configs.aws_credentials") is not None:
+    from configs.aws_credentials import *  # pylint: disable=unused-wildcard-import
