@@ -31,6 +31,7 @@ AWS_CLI = True
 UPDATE_ML = True
 RUN_ML = True
 CLEANUP_SNS = True
+CPU_ONLY = False
 
 # If the local_config module is found, import all those settings, overriding any here that overlap.
 sys.path.append(Path(__file__).parent)

@@ -1,0 +1,10 @@
+# variable command: conda install pytorch==1.5.0 torchvision==0.6.0 [cudatoolkit= XX | cpuonly] -c pytorch 
+conda install -c fastai -c pytorch --freeze-installed fastai
+conda install -c anaconda --freeze-installed flask
+conda install --freeze-installed xmltodict
+conda install -c conda-forge shapely 
+conda install -c anaconda --freeze-installed psycopg2
+conda install -c anaconda --freeze-installed requests
+conda install -c conda-forge --freeze-installed gdal
+conda install -c anaconda --freeze-installed pytest
+pip install fastai2==0.0.17
