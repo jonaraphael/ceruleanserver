@@ -5,53 +5,44 @@ from osgeo import gdal
 from numpy import zeros, floor, ceil, uint8, where, array, dstack
 from PIL import Image as PILimage
 import shutil
-import os
+from subprocess import run, PIPE
 import csv
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
-from configs import server_config, path_config  # pylint: disable=import-error
+from configs import (  # pylint: disable=import-error
+    server_config,
+    path_config,
+    ml_config,
+)
 
 
-def machine(learner, snso):
-    """Run machine learning on an SNS object
-    
+def machine(learner, img_path, inf_dir=None, inf_path=None):
+    """Run machine learning on a downloaded image
+
     Arguments:
-        snso {SNSO} -- a new image that we have determined to be of interest (e.g. over the ocean and using VV polarization)
+        learner {fastai2 learner} -- A trained and loaded learner
+        img_path {Path} -- Location of the large image to be processed
+
+    Keyword Arguments:
+        inf_dir {Path} -- Directory where inference chips should be stored (default: {None})
+        inf_path {Path} -- Location of the stitched-together output (default: {None})
     """
     # Prepare some constants
-    # XXX WARNING: chip_size_orig SHOULD ROUGHLY MATCH LENGTH SCALE OF MODEL TRAINING DATA
-    chip_size_orig = 4096  # px square cut out of original Tiff (roughly 1/6th the long dimension of an image)
-    chip_size_reduced = 512  # px square reduced resolution of chip_size
-    max_chip_qty = None  # No limit to the number of chips
-    threshold = None  # Between 0 (most) and 1 (least inclusive), which confidence should be considered oil
-    start_over = True  # Do we delete all files before creating chips, or pick up where we left off
-    overhang = False  # Should some chips hang over the edge of the original image (and therefore might have very few useful pixels)
-    record_nonzeros = False  # Should the images with non-zero average pixel value be recorded in a CSV
-    img_path = snso.s3["grd_tiff_dest"]  # Where the new image is
-    inf_dir = img_path.parent / "inf"  # Where the inference chips should be stored
-    merged_path = (
-        img_path.parent / "merged.tiff"
+    img_path = Path(img_path)
+    inf_dir = (
+        Path(inf_dir) if inf_dir else img_path.parent / "inf"
+    )  # Where the inference chips should be stored
+    inf_path = (
+        Path(inf_path) if inf_path else img_path.parent / "inference.tiff"
     )  # Where the merged inference mask should be stored
 
-    # Download Large GeoTiff
-    snso.download_grd_tiff()
     # Cut up the GTiff into many small TIFs
     img_to_chips(
-        img_path,
-        inf_dir,
-        chip_size_orig,
-        chip_size_reduced,
-        img_path.stem,
-        overhang,
-        max_chip_qty,
-        start_over,
-        record_nonzeros,
-        learner,
-        threshold,
+        img_path, inf_dir, mllearner=learner,
     )
     # Merge the masks back into a single image
-    merge_chips(inf_dir, merged_path)
+    merge_chips(inf_dir, inf_path)
     # Extract Polygons from the Merged file
     pass  ### Should we delete all the other intermediate files at this point?
     # Store Polygons in DB
@@ -59,7 +50,11 @@ def machine(learner, snso):
 
 
 def crop_box_gen(
-    px_wide, px_high, chip_size, geo_transform=(0, 1, 0, 0, 0, 1), overhang=False
+    px_wide,
+    px_high,
+    chip_size,
+    geo_transform=(0, 1, 0, 0, 0, 1),
+    overhang=ml_config.OVERHANG,
 ):
     """A generator that will sequentially return bounding corners of boxes to chop up a larger image into small ones
     
@@ -116,15 +111,14 @@ def crop_box_gen(
 def img_to_chips(
     img_path,
     out_dir,
-    chip_size_orig,
-    chip_size_reduced,
+    chip_size_orig=ml_config.CHIP_SIZE_ORIG,
+    chip_size_reduced=ml_config.CHIP_SIZE_REDUCED,
     out_stem=None,
-    overhang=False,
-    max_chip_qty=None,
-    start_over=True,
-    record_nonzeros=False,
+    overhang=ml_config.OVERHANG,
+    max_chip_qty=ml_config.MAX_CHIP_QTY,
+    start_over=ml_config.START_OVER,
+    record_nonzeros=ml_config.RECORD_NONZEROS,
     mllearner=None,
-    threshold=None,
 ):
     """Turn a large image into small ones using GDAL
 
@@ -181,9 +175,7 @@ def img_to_chips(
                     outputType=gdal.GDT_Byte,
                 )  # check out more args here: https://gdal.org/python/osgeo.gdal-module.html#TranslateOptions
                 if mllearner:  # If model provided
-                    infer(
-                        out_path, mllearner, threshold
-                    )  # Run Inference on the current chip
+                    infer(out_path, mllearner)  # Run Inference on the current chip
                 if record_nonzeros:  # If recording nonzero chips
                     chp = gdal.Open(str(out_path))  # Open each chip
                     stats = chp.GetRasterBand(1).GetStatistics(
@@ -204,21 +196,23 @@ def img_to_chips(
     del img
 
 
-def infer(png_path, learner, threshold=None):
+def infer(png_path, learner):
     """Run inference on a chip
 
     Arguments:
         png_path {Path} -- Location of a single chip
         learner {fastai2 model} -- Loaded fastai2 pkl file
-
-    Keyword Arguments:
-        threshold {float} -- Round predicted confidence above thresh to 1 and below to 0 (default: {None})
     """
     _, _, pred_class = learner.predict(
         png_path
     )  # Currently returns classes [not bilge, bilge, vessel]
-    mask = where(pred_class[1] > threshold, 1, 0) if threshold else pred_class[1]
-    PILimage.fromarray(uint8(mask * 255)).save(png_path)
+    # target_size = learner.dls.after_batch.size
+    target_size = (
+        ml_config.CHIP_SIZE_REDUCED
+    )  # XXXJona figure out if there is another way to make this work for all learners
+    PILimage.fromarray(uint8(pred_class[1] * 255)).resize(
+        (target_size, target_size)
+    ).save(png_path)
     gdal.Warp(
         destNameOrDestDS=str(png_path.with_suffix(".tiff")),
         srcDSOrSrcDSTab=str(png_path),
@@ -249,13 +243,11 @@ def merge_chips(chp_dir, merged_path, chip_ext="tiff"):
     """
     if server_config.VERBOSE:
         print("Merging Masks")
-    if (merged_path).exists():
-        (
-            merged_path
-        ).unlink()  # Delete file from previous merge attempt (gdal_merge will NOT overwrite!)
+    if merged_path.exists():
+        merged_path.unlink()  # Delete file from previous merge attempt (gdal_merge will NOT overwrite!)
     # gdal.Warp(destNameOrDestDS=str(merged_path), srcDSOrSrcDSTab=[str(p) for p in chp_dir.glob('*.png')], format='GTiff') # This doesn't work because PNG clamps to [0-255], and no_data makes some pixels invisible
-    cmd = f"gdal_merge.py -o {merged_path} {chp_dir}/*.{chip_ext}"
-    os.system(cmd)
+    cmd = f"gdal_merge.py -o {merged_path} {chp_dir}/*.{chip_ext}"  # XXXJona protect cmds against spaces in file paths
+    run(cmd, stdout=PIPE, shell=True)
     shutil.rmtree(chp_dir)
 
 
@@ -311,25 +303,26 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
     return out_path  # Return the path of the new file
 
 
-def load_learner_from_s3(pkl_path=Path(path_config.LOCAL_DIR + "models/ml.pkl")):
+def load_learner_from_s3(pkl_name=ml_config.ML_PKL, update_ml=ml_config.UPDATE_ML):
     """Import the latest trained model from S3
 
     Keyword Arguments:
-        pkl_path {Path} -- Location to store the pickled model (default: {Path(path_config.LOCAL_DIR+"models/ml.pkl")})
+        pkl_name {str} -- Name of pickled model to use (default: {'0_18_512_0.722.pkl'})
 
     Returns:
-        fastai2_learner -- A learner with the model already loaded in
+        fastai2_learner -- A learner with the model already loaded into memory
     """
+    pkl_path = Path(path_config.LOCAL_DIR) / "models" / pkl_name
     if server_config.VERBOSE:
         print("Loading Learner")
-    if server_config.UPDATE_ML and pkl_path.exists():  # pylint: disable=no-member
+    if update_ml and pkl_path.exists():  # pylint: disable=no-member
         pkl_path.unlink()  # pylint: disable=no-member
     if not pkl_path.exists():  # pylint: disable=no-member
-        download_str = f"aws s3 cp {server_config.ML_PKL} {pkl_path}"
+        src_path = "s3://skytruth-cerulean/model_artifacts/" + str(pkl_name)
+        download_str = f"aws s3 cp {src_path} {pkl_path}"
         # print(download_str)
-        os.system(download_str)
-    l = load_learner(pkl_path)
-    return l
+        run(download_str, shell=True)
+    return load_learner(pkl_path)
 
 
 def get_lbls():

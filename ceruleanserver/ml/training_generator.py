@@ -2,18 +2,23 @@
 from osgeo import gdal
 from pathlib import Path
 import config
-from classes import SHO
-from ml.inference import crop_box_gen, img_to_chips, nc_to_png
+from inference import crop_box_gen, img_to_chips, nc_to_png
 import shutil
 import zipfile
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent))
+from configs import ml_config  # pylint: disable=import-error
+from classes import SHO
+
 
 #%% Set up variables for next two cells
-chip_size_orig = 4096
-chip_size_reduced = 512
-max_chip_qty = None
-start_over = True
-overhang = False
-cleanup = False
+chip_size_orig = ml_config.CHIP_SIZE_ORIG
+chip_size_reduced = ml_config.CHIP_SIZE_REDUCED
+max_chip_qty = ml_config.MAX_CHIP_QTY
+start_over = ml_config.START_OVER
+overhang = ml_config.OVERHANG
+cleanup = True
 prods = [
     "S1A_IW_GRDH_1SDV_20200128T001658_20200128T001733_030993_038F42_D900",
 ]

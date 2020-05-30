@@ -9,6 +9,7 @@ APP_HOST = "0.0.0.0"
 APP_PORT = 5000
 DEBUG = False
 VERBOSE = False
+CLEANUP_SNS = True
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"
@@ -22,12 +23,6 @@ DEBUG_DB_ACCESS = True
 # SciHub login settings
 SH_USER = "jonaraph"
 SH_PWD = "fjjEwvMDHyJH9Fa"
-
-# ML Settings
-ML_PKL = "s3://skytruth-cerulean/model_artifacts/18_512_0.722.pkl"
-UPDATE_ML = True
-RUN_ML = True
-CLEANUP_SNS = True
 
 # If the local_config module is found, import all those settings, overriding any here that overlap.
 if importlib.util.find_spec("local_config") is not None:

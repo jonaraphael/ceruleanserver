@@ -1,7 +1,6 @@
 """ Testing the functionality of our data objects """
 import pytest
 import sys
-import os
 import json
 import shutil
 from pathlib import Path

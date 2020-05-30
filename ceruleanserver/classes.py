@@ -1,4 +1,4 @@
-import os
+from subprocess import run, PIPE
 import xmltodict
 from datetime import datetime
 import shapely.geometry as sh
@@ -59,7 +59,8 @@ class SNSO:
 
         self.grd_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.grd_path.exists():
-            os.system(self.s3["grd_tiff_download_str"])
+            cmd = self.s3["grd_tiff_download_str"]
+            run(cmd, shell=True)
         return self.grd_path
 
     def cleanup(self):
@@ -199,7 +200,8 @@ class SHO:
         ] = f'aws s3 cp {self.s3["grd_tiff"]} {self.grd_path} --request-payer'
         self.grd_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.grd_path.exists():
-            os.system(self.s3["grd_tiff_download_str"])
+            cmd = self.s3["grd_tiff_download_str"]
+            run(cmd, shell=True)
         return self.grd_path
 
     def download_ocn(self, ocn_path=None):
