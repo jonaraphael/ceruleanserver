@@ -7,3 +7,6 @@ pandas
 gdal
 pytest
 boto3
+fastai2=0.0.17
+pytorch=1.5
+torchvision=0.6
