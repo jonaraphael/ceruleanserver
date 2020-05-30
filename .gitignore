@@ -6,3 +6,4 @@ aws_credentials.py
 modeltraining/data
 tests/test_fixtures
 test_files_temp
+.pyc

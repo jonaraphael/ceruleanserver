@@ -333,10 +333,7 @@ def load_learner_from_s3(pkl_dir: Union[Path, str] = config.MODEL_DWNLD_DIR):
         else:
             bucket = s3.get_s3_bucket()
             s3.download_prefix(bucket, pkl_dir, f"{aws_config.S3_MODELS_PATH}/{aws_config.S3_MODEL_NAME}")
-    if config.CPU_ONLY:
-        return load_learner(pkl_path, device=cpu)
-    else:
-        return load_learner(pkl_path)
+    return load_learner(pkl_path, cpu=config.CPU_ONLY)
 
 
 def get_lbls():

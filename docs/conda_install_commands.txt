@@ -7,4 +7,7 @@ conda install -c anaconda --freeze-installed psycopg2
 conda install -c anaconda --freeze-installed requests
 conda install -c conda-forge --freeze-installed gdal
 conda install -c anaconda --freeze-installed pytest
+conda install -c anaconda --freeze-installed boto3
+conda install --freeze-installed jupyter nb_conda nb_conda_kernels ipykernel
+# variable command: python -m ipykernel install --user --name [CONDA_ENV_NAME] --display-name "Python ([CONDA_ENV_NAME])"
 pip install fastai2==0.0.17
