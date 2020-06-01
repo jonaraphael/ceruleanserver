@@ -10,6 +10,9 @@ APP_PORT = 5000
 DEBUG = False
 VERBOSE = False
 CLEANUP_SNS = True
+DOWNLOAD_GRDS = True
+RUN_ML = True
+UPDATE_ML = True
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"

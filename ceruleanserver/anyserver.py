@@ -1,27 +1,14 @@
 from flask import Flask, request, make_response, jsonify
 import json
 import requests
-import shapely.geometry as sh
 from data import DBConnection
 from classes import SHO, SNSO
-from ml.inference import machine, load_learner_from_s3, get_lbls
-from configs import path_config, server_config, ml_config
+from configs import server_config, ml_config
+from ml.inference import INFERO
+from utils.common import load_ocean_shape
 
 # Create app
 app = Flask(__name__)
-
-
-def load_ocean_shape():
-    """Read the ocean GeoJSON into memory once, so that it is accessible for all future functions
-
-    Returns:
-        [Geometry] -- A Shapely geometry produced from a GeoJSON
-    """
-    with open(path_config.LOCAL_DIR + "aux_files/OceanGeoJSON_lowres.geojson") as f:
-        ocean_features = json.load(f)["features"]
-    return sh.GeometryCollection(
-        [sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features]
-    )[0]
 
 
 def process_sns(sns):
@@ -36,19 +23,15 @@ def process_sns(sns):
     sho = SHO(snso.prod_id)
     if sho.grd:
         db.insert_dict_as_row(*sho.grd_db_row())
-        if server_config.VERBOSE:
-            print("shgrd", sho.grd_db_row()[0].get("identifier"))
     if sho.ocn:
         db.insert_dict_as_row(*sho.ocn_db_row())
-        if server_config.VERBOSE:
-            print("shocn", sho.ocn_db_row()[0].get("identifier"))
-    if (
-        snso.is_machinable and ml_config.RUN_ML
-    ):  # This will reduce the volume of images processed by about 60%
+    if snso.is_machinable and server_config.DOWNLOAD_GRDS:
         snso.download_grd_tiff()  # Download Large GeoTiff
-        machine(
-            learner512, snso.grd_path
-        )  # Uncomment this if you are willing to download large files, and comment out the next line if you want to avoid downloading them repeatedly
+    if snso.grd_path and server_config.RUN_ML:
+        infero = INFERO(snso.grd_path, snso.prod_id)
+        infero.run_inference()
+        if infero.has_geometry():
+            db.insert_dict_as_row(*infero.inf_db_row())
     if server_config.CLEANUP_SNS:
         snso.cleanup()
 
@@ -105,7 +88,5 @@ if __name__ in [
     # Permanent Objects:
     db = DBConnection()  # Database Object
     ocean_shape = load_ocean_shape()  # Ocean Geometry
-    learner512 = load_learner_from_s3('2_18_512_0.705.pkl')  # ML PKL
-    learner256 = load_learner_from_s3('2_18_256_0.691.pkl')  # ML PKL
     # Start listening on the default port
     app.run(host=server_config.APP_HOST, debug=server_config.DEBUG)

@@ -7,8 +7,11 @@ from pathlib import Path
 import shapely.geometry as sh
 
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
-import classes
+sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver" / "ml"))
 from configs import testing_config, path_config  # pylint: disable=import-error
+from classes import SNSO, SHO
+from utils.common import clear
+from ml.inference import INFERO, get_lbls
 
 
 @pytest.fixture  # This means treat the following as an object (instead of a function)
@@ -69,13 +72,11 @@ def FILE_grd_path():
         test_dir
         / "temp/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/vv_grd.tiff"
     )
-    if temp_grd.exists():  # pylint: disable=no-member
-        temp_grd.unlink()  # pylint: disable=no-member
+    clear(temp_grd)
     temp_grd.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_grd), str(temp_grd))
     yield temp_grd
-    if temp_grd.exists():  # pylint: disable=no-member
-        temp_grd.unlink()  # pylint: disable=no-member
+    clear(temp_grd)
 
 
 @pytest.fixture
@@ -93,20 +94,18 @@ def FILE_ocn_path():
         test_dir
         / "temp/S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913/ocn.zip"
     )
-    if temp_ocn.exists():  # pylint: disable=no-member
-        temp_ocn.unlink()  # pylint: disable=no-member
+    clear(temp_ocn)
     temp_ocn.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_ocn), str(temp_ocn))
     yield temp_ocn
-    if temp_ocn.exists():  # pylint: disable=no-member
-        temp_ocn.unlink()  # pylint: disable=no-member
+    clear(temp_ocn)
 
 
 #%% Test SNSO
 
 
 def test_snso(mock_sns):
-    snso = classes.SNSO(mock_sns)
+    snso = SNSO(mock_sns)
     assert (
         snso.s3["bucket"]
         == "s3://sentinel-s1-l1c/GRD/2020/4/6/IW/DV/S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112/"
@@ -116,7 +115,7 @@ def test_snso(mock_sns):
 
 @pytest.fixture
 def snso(mock_sns):
-    return classes.SNSO(mock_sns)
+    return SNSO(mock_sns)
 
 
 def test_snso_download(snso, FILE_grd_path):
@@ -146,7 +145,7 @@ def test_snso_cleanup(snso, FILE_grd_path):
 
 
 def test_sho():
-    sho = classes.SHO(
+    sho = SHO(
         "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"
     )
     assert isinstance(sho.query_prods_res, dict)
@@ -162,7 +161,7 @@ def test_sho():
 
 @pytest.fixture
 def sho():
-    return classes.SHO(
+    return SHO(
         "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"
     )
 
@@ -195,3 +194,36 @@ def test_sho_cleanup(sho, FILE_grd_path, FILE_ocn_path):
     sho.cleanup()
     assert not FILE_grd_path.exists()
     assert not FILE_ocn_path.exists()
+
+
+#%% Test INFERO
+
+
+def test_infero(FILE_grd_path):
+    infero = INFERO(
+        FILE_grd_path,
+        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
+    )
+    assert infero.ocn_id == None
+
+
+@pytest.fixture
+def infero(FILE_grd_path):
+    return INFERO(
+        FILE_grd_path,
+        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
+        pkls=["2_18_128_0.676.pkl"], 
+        thresholds=[128]
+    )
+
+
+def test_run_inference(infero):
+    infero.run_inference()
+    assert infero.chip_size_orig == 4096
+    assert infero.geoj_path == ""
+    assert infero.geoj_path.exists()
+    assert infero.has_geometry
+    row, tbl = infero.inf_db_row()
+    assert tbl == "inference"
+    assert row["geometry"] == ""
+

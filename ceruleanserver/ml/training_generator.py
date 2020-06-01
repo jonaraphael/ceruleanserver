@@ -1,8 +1,7 @@
 #%%
 from osgeo import gdal
 from pathlib import Path
-import config
-from inference import crop_box_gen, img_to_chips, nc_to_png
+from raster_processing import img_to_chips, nc_to_png
 import shutil
 import zipfile
 import sys
@@ -10,6 +9,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from configs import ml_config  # pylint: disable=import-error
 from classes import SHO
+from utils.common import clear
 
 
 #%% Set up variables for next two cells
@@ -45,13 +45,13 @@ for pid in set(prods):
             chp_dir,
             chip_size_orig,
             chip_size_reduced,
-            pid,
             overhang,
             max_chip_qty,
             start_over,
+            out_stem=pid,
         )
         if cleanup:
-            img_path.unlink()  # Delete the huge GRD # pylint: disable=no-member
+            clear(img_path)  # Delete the huge GRD
 
 #%%  Make chips from a handmade mask
 # XXX Before running this block, you must edit hand_edited_mask.png in photoshop to create a [0,1] mask
@@ -64,11 +64,11 @@ for pid in set(prods):
             chp_dir,
             chip_size_reduced,
             chip_size_reduced,
-            pid,
             overhang,
             max_chip_qty,
             start_over,
             True,
+            out_stem=pid,
         )
         if cleanup:
             shutil.rmtree(
@@ -120,10 +120,10 @@ for pid in set(prods):
             chp_dir,
             chip_size_orig,
             chip_size_reduced,
-            sho.grd_id,
             overhang,
             max_chip_qty,
             start_over,
+            out_stem=sho.grd_id,
         )
 
 #%% Sorted list of products used to train the fastai2 model

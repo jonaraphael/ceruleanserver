@@ -5,16 +5,13 @@ The local configs are for dev debugging/testing.
 import importlib
 
 # ML Settings
-ML_PKL = "2_18_512_0.705.pkl"
 ML_PKL_LIST = ["2_18_128_0.676.pkl", "2_18_256_0.691.pkl", "2_18_512_0.705.pkl"]
-UPDATE_ML = True
-RUN_ML = True
+ML_THRESHOLDS = [32, 64, 128]  # Oil confidence thresholds for contour (int 0-255)
 
 # XXX WARNING: chip_size_orig SHOULD ROUGHLY MATCH LENGTH SCALE OF MODEL TRAINING DATA
 CHIP_SIZE_ORIG = 4096  # px square cut out of original Tiff (roughly 1/6th the long dimension of an image)
 CHIP_SIZE_REDUCED = 512  # px square reduced resolution of chip_size
 MAX_CHIP_QTY = None  # No limit to the number of chips
-THRESH = 128  # Oil confidence threshold for contour (between 0 and 255)
 START_OVER = True  # Do we delete all files before creating chips, or pick up where we left off
 OVERHANG = False  # Should some chips hang over the edge of the original image (and therefore might have very few useful pixels)
 RECORD_NONZEROS = False  # Should the images with non-zero average pixel value be recorded in a CSV

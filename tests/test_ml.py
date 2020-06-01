@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
 from ml import inference  # pylint: disable=import-error
 from configs import testing_config, path_config  # pylint: disable=import-error
+from utils.common import clear
 
 
 @pytest.fixture
@@ -19,13 +20,11 @@ def FILE_ml_pkl():
     )
     perm_pkl = test_dir / "perm/models/ml.pkl"
     temp_pkl = test_dir / "temp/models/ml.pkl"
-    if temp_pkl.exists():  # pylint: disable=no-member
-        temp_pkl.unlink()  # pylint: disable=no-member
+    clear(temp_pkl)
     temp_pkl.parent.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
     shutil.copy2(str(perm_pkl), str(temp_pkl))
     yield temp_pkl
-    if temp_pkl.exists():  # pylint: disable=no-member
-        temp_pkl.unlink()  # pylint: disable=no-member
+    clear(temp_pkl)
 
 
 def test_load_learner(FILE_ml_pkl):

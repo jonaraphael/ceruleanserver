@@ -1,13 +1,13 @@
 from subprocess import run, PIPE
 import xmltodict
-from datetime import datetime
 import shapely.geometry as sh
-from configs import server_config
+from configs import server_config, ml_config, path_config
 import json
 import requests
 import shutil
 from pathlib import Path
 from errors import MissingProductError
+from utils.common import str_to_ts, xml_get
 
 
 class SNSO:
@@ -49,7 +49,10 @@ class SNSO:
                 message="ERROR: This GRD doesn't have VV polarization",
             )  # we don't want to process any polarization other than vv
 
-        self.grd_path = grd_path or Path(self.prod_id) / "vv_grd.tiff"
+        self.grd_path = (
+            grd_path
+            or Path(path_config.LOCAL_DIR) / "temp" / self.prod_id / "vv_grd.tiff"
+        )
         self.s3[
             "grd_tiff"
         ] = f"{self.s3['bucket']}measurement/{self.sns_msg['mode'].lower()}-vv.tiff"
@@ -176,7 +179,10 @@ class SHO:
                 message="ERROR: No VV-polarized GRD found for this product ID on Sinergise's S3 bucket",
             )
 
-        self.grd_path = grd_path if grd_path else Path(self.prod_id) / "vv_grd.tiff"
+        self.grd_path = (
+            grd_path
+            or Path(path_config.LOCAL_DIR) / "temp" / self.prod_id / "vv_grd.tiff"
+        )
         self.s3 = {
             "path": self.prod_id[7:10]
             + "/"
@@ -214,7 +220,9 @@ class SHO:
                 product_id=self.prod_id, message="ERROR: No OCN found for this GRD"
             )
 
-        self.ocn_path = ocn_path or Path(self.ocn_id) / "ocn.zip"
+        self.ocn_path = (
+            ocn_path or Path(path_config.LOCAL_DIR) / "temp" / self.ocn_id / "ocn.zip"
+        )
         self.ocn_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.ocn_path.exists():
             with requests.Session() as s:
@@ -303,45 +311,3 @@ class SHO:
             "grd_uuid": f"'{self.grd_shid}'",  # Foreign Key
         }
         return (row, tbl)
-
-
-def xml_get(lst, a, key1="@name", key2="#text"):
-    """Extract a field from parsed XML
-    
-    Arguments:
-        lst {list} -- a list of elements all sharing the same data type (e.g. str)
-        a {str} -- the name of an XML tag you want
-    
-    Keyword Arguments:
-        key1 {str} -- the field where a is stored (default: {"@name"})
-        key2 {str} -- the type of data that a is (default: {"#text"})
-    
-    Returns:
-        any -- the value of the XML tag that has the name 'a'
-    """
-    # from a lst of dcts, find the dct that has key value pair (@name:a), then retrieve the value of (#text:?)
-    if lst == None:
-        return None  # This is a hack for the case where there is no OCN product. TODO handle absent OCN higher up
-    for dct in lst:
-        if dct.get(key1) == a:
-            return dct.get(key2)
-    return None
-
-
-def str_to_ts(s):
-    """Turns a string into a timestamp
-    
-    Arguments:
-        s {str} -- one of three formatted strings that occur in SNS or SciHub
-    
-    Returns:
-        timestamp -- seconds since epoch
-    """
-    if "Z" in s:
-        if "." in s:
-            fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
-        else:
-            fmt = "%Y-%m-%dT%H:%M:%SZ"
-    else:
-        fmt = "%Y-%m-%dT%H:%M:%S"
-    return datetime.strptime(s, fmt).timestamp()
