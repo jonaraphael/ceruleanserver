@@ -12,10 +12,14 @@ ML_THRESHOLDS = [32, 64, 128]  # Oil confidence thresholds for contour (int 0-25
 CHIP_SIZE_ORIG = 4096  # px square cut out of original Tiff (roughly 1/6th the long dimension of an image)
 CHIP_SIZE_REDUCED = 512  # px square reduced resolution of chip_size
 MAX_CHIP_QTY = None  # No limit to the number of chips
-START_OVER = True  # Do we delete all files before creating chips, or pick up where we left off
+START_OVER = (
+    True  # Do we delete all files before creating chips, or pick up where we left off
+)
 OVERHANG = False  # Should some chips hang over the edge of the original image (and therefore might have very few useful pixels)
-RECORD_NONZEROS = False  # Should the images with non-zero average pixel value be recorded in a CSV
+RECORD_NONZEROS = (
+    False  # Should the images with non-zero average pixel value be recorded in a CSV
+)
 
 # If the local_config module is found, import all those settings, overriding any here that overlap.
-if importlib.util.find_spec("local_config") is not None:
-    from local_config import *  # pylint: disable=unused-wildcard-import
+if importlib.util.find_spec("configs.local_config") is not None:
+    from configs.local_config import *  # pylint: disable=unused-wildcard-import

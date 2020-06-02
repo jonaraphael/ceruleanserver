@@ -13,6 +13,7 @@ CLEANUP_SNS = True
 DOWNLOAD_GRDS = True
 RUN_ML = True
 UPDATE_ML = True
+OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"
@@ -28,6 +29,5 @@ SH_USER = "jonaraph"
 SH_PWD = "fjjEwvMDHyJH9Fa"
 
 # If the local_config module is found, import all those settings, overriding any here that overlap.
-if importlib.util.find_spec("local_config") is not None:
-    from local_config import *  # pylint: disable=unused-wildcard-import
-
+if importlib.util.find_spec("configs.local_config") is not None:
+    from configs.local_config import *  # pylint: disable=unused-wildcard-import

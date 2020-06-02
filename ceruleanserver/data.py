@@ -99,7 +99,7 @@ class DBConnection:
             self.execute(cmd)
             if server_config.VERBOSE:
                 if server_config.DEBUG_DB_ACCESS:
-                    print(f"writing to table {tbl}")
+                    print(f"Writing to table {tbl}")
                 else:
                     print(f"DB access turned off; would write to table {tbl}")
         except psycopg2.errors.UniqueViolation as e:  # pylint: disable=no-member

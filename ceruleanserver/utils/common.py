@@ -4,11 +4,13 @@ Common utility functions.
 from pathlib import Path
 from datetime import datetime
 import shapely.geometry as sh
+from subprocess import run, PIPE
 import json
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
-from configs import path_config
+from configs import path_config, server_config
+
 
 def clear(p):
     """Delete file if it exists
@@ -63,14 +65,34 @@ def str_to_ts(s):
     return datetime.strptime(s, fmt).timestamp()
 
 
-def load_ocean_shape():
+def load_ocean_shape(geom_name=server_config.OCEAN_GEOJSON):
     """Read the ocean GeoJSON into memory once, so that it is accessible for all future functions
 
     Returns:
         [Geometry] -- A Shapely geometry produced from a GeoJSON
     """
+    geom_path = Path(path_config.LOCAL_DIR) / "aux_files" / geom_name
+    if server_config.VERBOSE:
+        print("Loading Ocean GeoJSON")
+    if not geom_path.exists():  # pylint: disable=no-member
+        src_path = "s3://skytruth-cerulean/aux_files/" + str(geom_name)
+        download_str = f"aws s3 cp {src_path} {geom_path}"
+        # print(download_str)
+        run(download_str, shell=True)
+
     with open(path_config.LOCAL_DIR + "aux_files/OceanGeoJSON_lowres.geojson") as f:
         ocean_features = json.load(f)["features"]
-    return sh.GeometryCollection(
+    geom = sh.GeometryCollection(
         [sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features]
     )[0]
+    return geom
+
+
+def create_pg_array_string(lst):
+    if isinstance(lst[0], str):
+        out = '{"' + '","'.join(lst) + '"}'
+    elif isinstance(lst[0], (int, float)):
+        out = "{" + ",".join([str(l) for l in lst]) + "}"
+    else:
+        print("ERROR -- Unkown type being turned into string")
+    return out

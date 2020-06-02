@@ -3,8 +3,8 @@ from fastai2.learner import load_learner
 from subprocess import run, PIPE
 import sys
 import json
-from vector_processing import unify, sparsify, intersection
-from raster_processing import (
+from ml.vector_processing import unify, sparsify, intersection
+from ml.raster_processing import (
     inference_to_poly,
     merge_chips,
     inference_to_geotiff,
@@ -17,7 +17,7 @@ from configs import (  # pylint: disable=import-error
     path_config,
     ml_config,
 )
-from utils.common import clear
+from utils.common import clear, create_pg_array_string
 
 
 class INFERO:
@@ -56,6 +56,7 @@ class INFERO:
         multi_machine(self)
         with open(self.geom_path) as f:
             self.geom = json.load(f)
+        self.geom["features"][0]["geometry"]["crs"] = self.geom["crs"] # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
         self.has_geometry = len(self.geom["features"][0]["geometry"]["coordinates"]) > 0
 
     def inf_db_row(self):
@@ -67,14 +68,13 @@ class INFERO:
         tbl = "inference"
         row = {
             "grd_id": f"'{self.prod_id}'",
-            "geometry": f"ST_GeomFromGeoJSON('{json.dumps(self.geoj)}')",
-            "pkls": f"{self.pkls}",
-            "thresholds": f"{self.thresholds}",
+            "geometry": f"ST_GeomFromGeoJSON('{json.dumps(self.geom['features'][0]['geometry'])}')",
+            "pkls": f"'{create_pg_array_string(self.pkls)}'",
+            "thresholds": f"'{create_pg_array_string(self.thresholds)}'",
             "fine_pkl_idx": f"{self.fine_pkl_idx}",
             "chip_size_orig": f"{self.chip_size_orig}",
             "chip_size_reduced": f"{self.chip_size_reduced}",
             "overhang": f"{self.overhang}",
-            "ocn_id": f"{self.ocn_id}",
         }
         return (row, tbl)
 
@@ -110,7 +110,8 @@ def multi_machine(infero, out_path=None):
         inference_path = (path / pkl).with_suffix(".tiff")
 
         if not inference_path.exists() and server_config.RUN_ML:
-            machine(load_learner_from_s3(pkl, False), infero, out_path=inference_path)
+            learner = load_learner_from_s3(pkl, False)
+            machine(learner, infero, out_path=inference_path)
 
         geojson_path = inference_to_poly(inference_path, infero.thresholds[i])
         geojson_paths += [geojson_path]

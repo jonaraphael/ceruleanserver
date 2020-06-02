@@ -30,7 +30,7 @@ def process_sns(sns):
     if snso.grd_path and server_config.RUN_ML:
         infero = INFERO(snso.grd_path, snso.prod_id)
         infero.run_inference()
-        if infero.has_geometry():
+        if infero.has_geometry:
             db.insert_dict_as_row(*infero.inf_db_row())
     if server_config.CLEANUP_SNS:
         snso.cleanup()

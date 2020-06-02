@@ -1,14 +1,18 @@
 # run in order
-# variable command: conda install pytorch==1.5.0 torchvision==0.6.0 [cudatoolkit= XX | cpuonly] -c pytorch 
-conda install -c fastai -c pytorch --freeze-installed fastai
-conda install -c anaconda --freeze-installed flask
-conda install --freeze-installed xmltodict
-conda install -c conda-forge shapely 
-conda install -c anaconda --freeze-installed psycopg2
-conda install -c anaconda --freeze-installed requests
-conda install -c conda-forge --freeze-installed gdal
-conda install -c anaconda --freeze-installed pytest
-conda install -c anaconda --freeze-installed boto3
-conda install --freeze-installed jupyter nb_conda nb_conda_kernels ipykernel
-# variable command: python -m ipykernel install --user --name [CONDA_ENV_NAME] --display-name "Python ([CONDA_ENV_NAME])"
+conda update conda
+conda create --name cerulean
+conda activate cerulean
+conda install python=3.7.5 -y
+# variable command: conda install pytorch==1.5.0 torchvision==0.6.0 [cudatoolkit= XX | cpuonly] -c pytorch -y
+conda install -c fastai -c pytorch --freeze-installed fastai -y
+conda install -c anaconda --freeze-installed flask -y
+conda install --freeze-installed xmltodict -y
+conda install -c conda-forge shapely -y
+conda install -c anaconda --freeze-installed psycopg2 -y
+conda install -c anaconda --freeze-installed requests -y
+conda install -c conda-forge --freeze-installed gdal -y
+conda install -c anaconda --freeze-installed pytest -y
+conda install -c anaconda --freeze-installed boto3 -y
+conda install --freeze-installed jupyter nb_conda nb_conda_kernels ipykernel -y
+python -m ipykernel install --user --name cerulean --display-name "Python (cerulean)"
 pip install fastai2==0.0.17
