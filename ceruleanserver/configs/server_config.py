@@ -7,7 +7,7 @@ import importlib
 # Flask app settings
 APP_HOST = "0.0.0.0"
 APP_PORT = 5000
-DEBUG = False
+FLASK_DEBUG = False
 VERBOSE = False
 CLEANUP_SNS = True
 DOWNLOAD_GRDS = True

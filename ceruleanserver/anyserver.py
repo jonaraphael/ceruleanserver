@@ -89,4 +89,4 @@ if __name__ in [
     db = DBConnection()  # Database Object
     ocean_shape = load_ocean_shape()  # Ocean Geometry
     # Start listening on the default port
-    app.run(host=server_config.APP_HOST, debug=server_config.DEBUG)
+    app.run(host=server_config.APP_HOST, debug=server_config.FLASK_DEBUG)

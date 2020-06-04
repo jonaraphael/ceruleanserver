@@ -48,6 +48,7 @@ class INFERO:
         self.geom_path = geom_path or self.grd_path.with_name(
             f"slick_{'-'.join([str(t) for t in self.thresholds])}conf.geojson"
         )
+        self.has_geometry = None
 
     def __repr__(self):
         return f"<INFERObject: {self.prod_id or self.grd_path.name}>"
@@ -56,8 +57,11 @@ class INFERO:
         multi_machine(self)
         with open(self.geom_path) as f:
             self.geom = json.load(f)
-        self.geom["features"][0]["geometry"]["crs"] = self.geom["crs"] # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
+        self.geom["features"][0]["geometry"]["crs"] = self.geom[
+            "crs"
+        ]  # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
         self.has_geometry = len(self.geom["features"][0]["geometry"]["coordinates"]) > 0
+        return self.geom_path
 
     def inf_db_row(self):
         """Creates a dictionary that aligns with our inference DB columns

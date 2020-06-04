@@ -8,10 +8,10 @@ import shapely.geometry as sh
 
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver" / "ml"))
+sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver" / "utils"))
 from configs import testing_config, path_config  # pylint: disable=import-error
 from classes import SNSO, SHO
-from utils.common import clear
-from ml.inference import INFERO, get_lbls
+from common import clear
 
 
 @pytest.fixture  # This means treat the following as an object (instead of a function)
@@ -132,7 +132,7 @@ def test_snso_db_row(snso):
     row, tbl = snso.sns_db_row()
     assert tbl == "sns"
     assert row["sns_messageid"] == "'09594279-4fa5-56b7-bdce-1568068e0471'"
-    assert row["starttime"] == "1586981226.0"
+    assert row["starttime"] == "1586966826.0"
 
 
 def test_snso_cleanup(snso, FILE_grd_path):
@@ -145,9 +145,7 @@ def test_snso_cleanup(snso, FILE_grd_path):
 
 
 def test_sho():
-    sho = SHO(
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"
-    )
+    sho = SHO("S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112")
     assert isinstance(sho.query_prods_res, dict)
     assert (
         sho.grd_id
@@ -161,9 +159,7 @@ def test_sho():
 
 @pytest.fixture
 def sho():
-    return SHO(
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"
-    )
+    return SHO("S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112")
 
 
 def test_sho_download_grd(sho, FILE_grd_path):
@@ -194,36 +190,3 @@ def test_sho_cleanup(sho, FILE_grd_path, FILE_ocn_path):
     sho.cleanup()
     assert not FILE_grd_path.exists()
     assert not FILE_ocn_path.exists()
-
-
-#%% Test INFERO
-
-
-def test_infero(FILE_grd_path):
-    infero = INFERO(
-        FILE_grd_path,
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
-    )
-    assert infero.ocn_id == None
-
-
-@pytest.fixture
-def infero(FILE_grd_path):
-    return INFERO(
-        FILE_grd_path,
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
-        pkls=["2_18_128_0.676.pkl"], 
-        thresholds=[128]
-    )
-
-
-def test_run_inference(infero):
-    infero.run_inference()
-    assert infero.chip_size_orig == 4096
-    assert infero.geoj_path == ""
-    assert infero.geoj_path.exists()
-    assert infero.has_geometry
-    row, tbl = infero.inf_db_row()
-    assert tbl == "inference"
-    assert row["geometry"] == ""
-

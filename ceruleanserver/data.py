@@ -46,11 +46,11 @@ class DBConnection:
         Arguments:
             command {str} -- any SQL query to be run on the DB
         """
-        if server_config.DEBUG and not server_config.DEBUG_DB_ACCESS:
+        if not server_config.DEBUG_DB_ACCESS:
+            print(f"DB access turned off; would write to table but can't")
             pass
         else:
-            if server_config.VERBOSE:
-                print("Running SQL: ", command)
+            # print("Running SQL: ", command)
             self.cur.execute(command)
 
     def read_field_from_field_value_table(self, r, f, v, tbl):
@@ -97,11 +97,6 @@ class DBConnection:
         self.open()
         try:
             self.execute(cmd)
-            if server_config.VERBOSE:
-                if server_config.DEBUG_DB_ACCESS:
-                    print(f"Writing to table {tbl}")
-                else:
-                    print(f"DB access turned off; would write to table {tbl}")
         except psycopg2.errors.UniqueViolation as e:  # pylint: disable=no-member
             print("ERROR:", e)
         self.close()

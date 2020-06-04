@@ -1,11 +1,7 @@
 #%%
-from inference import get_lbls
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).parent.parent))
 from classes import SHO
-from ml.inference import INFERO
+from ml.inference import INFERO, get_lbls
 from configs import path_config, server_config
 
 pids = [

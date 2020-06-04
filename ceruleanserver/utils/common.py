@@ -2,7 +2,7 @@
 Common utility functions. 
 """
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import shapely.geometry as sh
 from subprocess import run, PIPE
 import json
@@ -55,14 +55,14 @@ def str_to_ts(s):
     Returns:
         timestamp -- seconds since epoch
     """
-    if "Z" in s:
-        if "." in s:
-            fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
-        else:
-            fmt = "%Y-%m-%dT%H:%M:%SZ"
+
+    if "Z" not in s:
+        s = s + "Z"  # Assume all timestamps without timezone are UTC #yucko
+    if "." in s:
+        fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
     else:
-        fmt = "%Y-%m-%dT%H:%M:%S"
-    return datetime.strptime(s, fmt).timestamp()
+        fmt = "%Y-%m-%dT%H:%M:%SZ"
+    return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc).timestamp()
 
 
 def load_ocean_shape(geom_name=server_config.OCEAN_GEOJSON):

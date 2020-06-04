@@ -104,7 +104,7 @@ def unify(json_paths, out_path=None):
     run(cmd, stdout=PIPE, shell=True)
 
     # Dissolve overlapping polygons into each other
-    cmd = f"ogr2ogr {out_path} {out_path} -dialect sqlite -sql 'SELECT ST_Union(geometry), * FROM {fc_name}'"
+    cmd = f"ogr2ogr {out_path} {out_path} -dialect sqlite -sql 'SELECT ST_Union(geometry), * FROM {fc_name}' -f GeoJSON"
     run(cmd, stdout=PIPE, shell=True)
     if server_config.VERBOSE:
         print("^^^ IGNORE THIS ERROR ^^^")  # XXXJona, why does this error occur?
@@ -178,7 +178,7 @@ def intersection(multi_1_path, multi_2_path, out_path=None):
     out_path = out_path or multi_1_path.with_name("clipped.geojson")
     multi_1_path = multipolygonize(multi_1_path)
     multi_2_path = multipolygonize(multi_2_path)
-    cmd = f"ogr2ogr '{out_path}' '{multi_1_path}' -clipsrc '{multi_2_path}' -explodecollections"
+    cmd = f"ogr2ogr '{out_path}' '{multi_1_path}' -clipsrc '{multi_2_path}' -explodecollections -f GeoJSON"
     run(cmd, stdout=PIPE, shell=True)
     multipolygonize(
         out_path, out_path=out_path
