@@ -57,6 +57,7 @@ class INFERO:
         multi_machine(self)
         with open(self.geom_path) as f:
             self.geom = json.load(f)
+        self.geom["crs"]["properties"]["name"] = "urn:ogc:def:crs:EPSG:8.8.1:4326" # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
         self.geom["features"][0]["geometry"]["crs"] = self.geom[
             "crs"
         ]  # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
@@ -200,5 +201,7 @@ def load_learner_from_s3(pkl_name, update_ml=server_config.UPDATE_ML):
     return load_learner(pkl_path)
 
 
-def get_lbls():
-    return  # Required by fastai as it was used during creation of the model
+sys.modules["__main__"].__dict__[
+    "get_lbls"
+] = None  # This is required to enable the pickle to load
+

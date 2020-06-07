@@ -14,6 +14,7 @@ DOWNLOAD_GRDS = True
 RUN_ML = True
 UPDATE_ML = True
 OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
+BLOCK_REPEAT_SNS = True
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"

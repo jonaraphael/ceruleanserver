@@ -18,22 +18,24 @@ def process_sns(sns):
         sns {dict} -- contains all the metadata and details of a new satellite image on S3
     """
     snso = SNSO(sns)
-    snso.update_intersection(ocean_shape)
-    db.insert_dict_as_row(*snso.sns_db_row())
-    sho = SHO(snso.prod_id)
-    if sho.grd:
-        db.insert_dict_as_row(*sho.grd_db_row())
-    if sho.ocn:
-        db.insert_dict_as_row(*sho.ocn_db_row())
-    if snso.is_machinable and server_config.DOWNLOAD_GRDS:
-        snso.download_grd_tiff()  # Download Large GeoTiff
-    if snso.grd_path and server_config.RUN_ML:
-        infero = INFERO(snso.grd_path, snso.prod_id)
-        infero.run_inference()
-        if infero.has_geometry:
-            db.insert_dict_as_row(*infero.inf_db_row())
-    if server_config.CLEANUP_SNS:
-        snso.cleanup()
+    already_processed = db.read_field_from_field_value_table('grd_id','sns_messageid',f"'{snso.sns['MessageId']}'", 'sns')
+    if (not len(already_processed) > 0) and server_config.BLOCK_REPEAT_SNS:
+        snso.update_intersection(ocean_shape)
+        db.insert_dict_as_row(*snso.sns_db_row())
+        sho = SHO(snso.prod_id)
+        if sho.grd:
+            db.insert_dict_as_row(*sho.grd_db_row())
+        if sho.ocn:
+            db.insert_dict_as_row(*sho.ocn_db_row())
+        if snso.is_machinable and server_config.DOWNLOAD_GRDS:
+            snso.download_grd_tiff()  # Download Large GeoTiff
+        if snso.grd_path and server_config.RUN_ML:
+            infero = INFERO(snso.grd_path, snso.prod_id)
+            infero.run_inference()
+            if infero.has_geometry:
+                db.insert_dict_as_row(*infero.inf_db_row())
+        if snso.is_downloaded and server_config.CLEANUP_SNS:
+            snso.cleanup()
 
 
 # Home page

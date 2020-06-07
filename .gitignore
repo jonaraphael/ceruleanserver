@@ -6,3 +6,4 @@ aws_config.py
 modeltraining/data/*
 tests/test_fixtures
 local/
+.pytest_cache/

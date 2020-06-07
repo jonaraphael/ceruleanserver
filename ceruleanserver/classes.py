@@ -34,6 +34,7 @@ class SNSO:
         self.is_machinable = (
             self.is_highdef and self.is_vv
         )  # Later amended to include isoceanic
+        self.is_downloaded = False
 
     def __repr__(self):
         return f"<SNSObject: {self.sns_msg['id']}>"
@@ -64,6 +65,7 @@ class SNSO:
         if not self.grd_path.exists():
             cmd = self.s3["grd_tiff_download_str"]
             run(cmd, shell=True)
+        self.is_downloaded = True
         return self.grd_path
 
     def cleanup(self):
