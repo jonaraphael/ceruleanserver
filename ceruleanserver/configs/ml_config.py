@@ -6,7 +6,7 @@ import importlib
 
 # ML Settings
 ML_PKL_LIST = ["2_18_128_0.676.pkl", "2_18_256_0.691.pkl", "2_18_512_0.705.pkl", "2_18_512_0.705.pkl"]
-ML_THRESHOLDS = [240, 240, 32, 128]  # Oil confidence thresholds for contour (int 0-255)
+ML_THRESHOLDS = [192, 192, 32, 128]  # Oil confidence thresholds for contour (int 0-255)
 
 # XXX WARNING: chip_size_orig SHOULD ROUGHLY MATCH LENGTH SCALE OF MODEL TRAINING DATA
 CHIP_SIZE_ORIG = 4096  # px square cut out of original Tiff (roughly 1/6th the long dimension of an image)
