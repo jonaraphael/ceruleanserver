@@ -15,6 +15,7 @@ RUN_ML = True
 UPDATE_ML = True
 OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
 BLOCK_REPEAT_SNS = True
+SQS_URL = "https://sqs.eu-central-1.amazonaws.com/162277344632/New_Machinable"
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"

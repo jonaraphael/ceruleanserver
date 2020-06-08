@@ -145,7 +145,7 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
 
 
 def inference_to_poly(raster_path, threshold, out_path=None):
-    out_path = out_path or raster_path.with_suffix(".geojson")
+    out_path = out_path or raster_path.with_name(str(threshold)+"_"+raster_path.stem+".geojson")
     intermediary_path = raster_path.with_name("intermediary.tiff")
     clear(out_path)
 

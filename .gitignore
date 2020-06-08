@@ -7,3 +7,4 @@ modeltraining/data/*
 tests/test_fixtures
 local/
 .pytest_cache/
+*.zip
