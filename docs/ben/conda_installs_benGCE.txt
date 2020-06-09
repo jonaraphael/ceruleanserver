@@ -3,16 +3,16 @@ conda init bash
 # new shell
 git clone https://github.com/jonaraphael/ceruleanserver.git
 
-sudo apt-get update
-sudo apt install python-gdal
-sudo apt-get install gdal-bin
+sudo apt-get update -y
+sudo apt install python-gdal -y
+sudo apt-get install gdal-bin -y
 
 conda update conda -y
 
 conda create --name cerulean -y
 conda activate cerulean
 conda install python=3.7.5 -y
-conda install pytorch==1.5.0 torchvision==0.6.0 cudatoolkit=10.1 -c pytorch 
+conda install pytorch==1.5.0 torchvision==0.6.0 cudatoolkit=10.1 -c pytorch -y
 conda install -c fastai -c pytorch --freeze-installed fastai -y
 conda install -c anaconda --freeze-installed flask -y
 conda install --freeze-installed xmltodict -y
