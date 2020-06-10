@@ -145,7 +145,9 @@ def nc_to_png(nc_path, bands, target_size, out_path=None):
 
 
 def inference_to_poly(raster_path, threshold, out_path=None):
-    out_path = out_path or raster_path.with_name(str(threshold)+"_"+raster_path.stem+".geojson")
+    out_path = out_path or raster_path.with_name(
+        str(threshold) + "_" + raster_path.stem + ".geojson"
+    )
     intermediary_path = raster_path.with_name("intermediary.tiff")
     clear(out_path)
 
@@ -253,3 +255,13 @@ def img_chip_generator(
                 del chp  # Remove the chip from memory
             yield out_path
     del img
+
+
+def resize(in_path, out_path, pct):
+    gdal.Translate(
+        str(out_path),
+        str(in_path),
+        widthPct=int(pct * 100),
+        heightPct=int(pct * 100),
+        outputType=gdal.GDT_Byte,
+    )  # check out more args here: https://gdal.org/python/osgeo.gdal-module.html#TranslateOptions

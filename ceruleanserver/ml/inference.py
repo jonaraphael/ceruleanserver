@@ -9,6 +9,7 @@ from ml.raster_processing import (
     merge_chips,
     inference_to_geotiff,
     img_chip_generator,
+    resize,
 )
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -57,12 +58,29 @@ class INFERO:
         multi_machine(self)
         with open(self.geom_path) as f:
             self.geom = json.load(f)
-        self.geom["crs"]["properties"]["name"] = "urn:ogc:def:crs:EPSG:8.8.1:4326" # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
+        self.geom["crs"]["properties"][
+            "name"
+        ] = "urn:ogc:def:crs:EPSG:8.8.1:4326"  # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
         self.geom["features"][0]["geometry"]["crs"] = self.geom[
             "crs"
         ]  # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
-        self.has_geometry = len(self.geom["features"][0]["geometry"]["coordinates"]) > 0
+        self.has_geometry = any(self.geom["features"][0]["geometry"]["coordinates"])
         return self.geom_path
+
+    def save_small_to_s3(self, pct=0.25):
+        small_path = self.grd_path.with_name("small.tiff")
+        resize(self.grd_path, small_path, pct)
+        s3_raster_path = f"s3://skytruth-cerulean/outputs/rasters/{self.prod_id}.tiff"
+        cmd = f"aws s3 cp {small_path} {s3_raster_path}"
+        run(cmd, shell=True)
+        clear(small_path)
+
+    def save_poly_to_s3(self):
+        s3_vector_path = (
+            f"s3://skytruth-cerulean/outputs/vectors/{self.prod_id}.geojson"
+        )
+        cmd = f"aws s3 cp {self.geom_path} {s3_vector_path}"
+        run(cmd, shell=True)
 
     def inf_db_row(self):
         """Creates a dictionary that aligns with our inference DB columns
@@ -204,4 +222,3 @@ def load_learner_from_s3(pkl_name, update_ml=server_config.UPDATE_ML):
 sys.modules["__main__"].__dict__[
     "get_lbls"
 ] = None  # This is required to enable the pickle to load
-

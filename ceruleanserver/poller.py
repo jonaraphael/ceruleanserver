@@ -31,6 +31,9 @@ def process_sns(snso):
         infero.run_inference()
         if infero.has_geometry:
             db.insert_dict_as_row(*infero.inf_db_row())
+            if server_config.UPLOAD_OUTPUTS:
+                infero.save_small_to_s3()
+                infero.save_poly_to_s3()
     if snso.is_downloaded and server_config.CLEANUP_SNS:
         snso.cleanup()
 
