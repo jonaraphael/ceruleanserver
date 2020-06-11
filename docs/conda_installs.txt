@@ -1,0 +1,36 @@
+# UNUSED
+# might need to replace [cpuonly] with [cudatoolkit= XX]
+# conda install -c fastai -c pytorch --freeze-installed fastai -y
+
+# run in order
+
+# install conda 
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+
+source .bashrc
+
+git clone https://github.com/jonaraphael/ceruleanserver.git
+
+sudo apt-get update
+sudo apt install python-gdal
+sudo apt-get install gdal-bin
+
+source activate
+conda update conda -y
+conda create --name cerulean -y
+conda activate cerulean
+conda install python=3.7.5 -y
+conda install pytorch==1.5.0 torchvision==0.6.0 cpuonly -c pytorch -y
+conda install -c anaconda --freeze-installed flask -y
+conda install --freeze-installed xmltodict -y
+conda install -c conda-forge shapely -y
+conda install -c anaconda --freeze-installed psycopg2 -y
+conda install -c anaconda --freeze-installed requests -y
+conda install -c conda-forge --freeze-installed gdal -y
+conda install -c anaconda --freeze-installed pytest -y
+conda install -c anaconda --freeze-installed boto3 -y
+conda install --freeze-installed jupyter nb_conda nb_conda_kernels ipykernel -y
+python -m ipykernel install --user --name cerulean --display-name "Python (cerulean)"
+
+pip install fastai2==0.0.17
