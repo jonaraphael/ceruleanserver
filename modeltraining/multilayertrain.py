@@ -4,11 +4,9 @@ from pathlib import Path
 import os
 import sys
 
-sys.path.append(Path(__file__).parent.parent)
+sys.path.append(str(Path(__file__).parent.parent / 'ceruleanserver' ))
 from configs import aws_config
-
-
-import aws_config
+from utils import s3
 
 datapath = Path(__file__).parent / "data"
 
@@ -16,8 +14,5 @@ if not datapath.exists():
     os.mkdir(datapath)
 
 if not any(x for x in datapath.iterdir()):
-    bucket = get_s3_bucket()
-    dir_prefix_map = [("ocn", aws_config.OCN_PREFIX)]
-    for dirname, s3_prefix in dir_prefix_map:
-        os.mkdir(datapath / dirname)
-        download_data(bucket, datapath / dirname, s3_prefix)
+    bucket = s3.get_s3_bucket(aws_config.S3_BUCKET_NAME)
+    s3.download_prefix(bucket, datapath, aws_config.S3_TRAINING_DATA_PATH, recursive=True)

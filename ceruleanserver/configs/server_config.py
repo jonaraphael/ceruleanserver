@@ -8,7 +8,7 @@ import importlib
 APP_HOST = "0.0.0.0"
 APP_PORT = 5000
 FLASK_DEBUG = False
-VERBOSE = False
+VERBOSE = True
 CLEANUP_SNS = True
 DOWNLOAD_GRDS = True
 RUN_ML = True
