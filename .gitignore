@@ -8,3 +8,4 @@ tests/test_fixtures
 local/
 .pytest_cache/
 *.zip
+.ipynb_checkpoints/
