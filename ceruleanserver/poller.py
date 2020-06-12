@@ -7,7 +7,8 @@ from ml.inference import INFERO
 from utils.common import load_ocean_shape
 import boto3
 
-client = boto3.client("sqs", region_name="eu-central-1")
+sqs_client = boto3.client("sqs", region_name="eu-central-1")
+sns_client = boto3.client("sns", region_name="eu-central-1")
 db = DBConnection()  # Database Object
 ocean_shape = load_ocean_shape()  # Ocean Geometry
 
@@ -31,6 +32,12 @@ def process_sns(snso):
         infero.run_inference()
         if infero.has_geometry:
             db.insert_dict_as_row(*infero.inf_db_row())
+            sns_client.publish(
+                TopicArn="arn:aws:sns:eu-central-1:162277344632:Slick_Alert",
+                Message=infero.notification(),
+                Subject="New Slick",
+                MessageStructure="json",
+            )
             if server_config.UPLOAD_OUTPUTS:
                 infero.save_small_to_s3()
                 infero.save_poly_to_s3()
@@ -39,7 +46,7 @@ def process_sns(snso):
 
 
 while True:
-    response = client.receive_message(
+    response = sqs_client.receive_message(
         QueueUrl=server_config.SQS_URL,
         AttributeNames=["All"],
         MessageAttributeNames=["All"],
@@ -51,7 +58,18 @@ while True:
         for msg in response["Messages"]:  # Up to 10 messages
             snso = SNSO(json.loads(msg["Body"])["Records"][0]["Sns"])
             snso.update_intersection(ocean_shape)
-            already_processed = (len(db.read_field_from_field_value_table("grd_id", "sns_messageid", f"'{snso.sns['MessageId']}'", "sns"))> 0)
-            if snso.is_machinable and (not already_processed or not server_config.BLOCK_REPEAT_SNS):
+            already_processed = (
+                len(
+                    db.read_field_from_field_value_table(
+                        "grd_id", "sns_messageid", f"'{snso.sns['MessageId']}'", "sns"
+                    )
+                )
+                > 0
+            )
+            if snso.is_machinable and (
+                not already_processed or not server_config.BLOCK_REPEAT_SNS
+            ):
                 process_sns(snso)
-            client.delete_message(QueueUrl=server_config.SQS_URL, ReceiptHandle=msg["ReceiptHandle"])
+            sqs_client.delete_message(
+                QueueUrl=server_config.SQS_URL, ReceiptHandle=msg["ReceiptHandle"]
+            )

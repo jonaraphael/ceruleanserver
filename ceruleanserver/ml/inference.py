@@ -101,6 +101,13 @@ class INFERO:
         }
         return (row, tbl)
 
+    def notification(self):
+        res = {
+            "grd_id": f"'{self.prod_id}'",
+            "geometry": f"ST_GeomFromGeoJSON('{json.dumps(self.geom['features'][0]['geometry'])}')",
+        }
+        return res
+
 
 def multi_machine(infero, out_path=None):
     """Run inference on a GRD using multiple ML PKLs, and combine them to get a single multipolygon
