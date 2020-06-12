@@ -34,7 +34,7 @@ def process_sns(snso):
             db.insert_dict_as_row(*infero.inf_db_row())
             sns_client.publish(
                 TopicArn="arn:aws:sns:eu-central-1:162277344632:Slick_Alert",
-                Message=infero.notification(),
+                Message=json.dumps({'default': json.dumps(infero.notification())}),
                 Subject="New Slick",
                 MessageStructure="json",
             )
@@ -50,7 +50,7 @@ while True:
         QueueUrl=server_config.SQS_URL,
         AttributeNames=["All"],
         MessageAttributeNames=["All"],
-        MaxNumberOfMessages=10,
+        MaxNumberOfMessages=1, # Change SQS visibility timeout to 15 minutes
         WaitTimeSeconds=20,
     )
 
