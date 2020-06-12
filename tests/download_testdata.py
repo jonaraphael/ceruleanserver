@@ -21,5 +21,5 @@ if version_dir.exists():
 else:
     version_dir.mkdir(parents=True)
     bucket = s3.get_s3_bucket(aws_config.S3_BUCKET_NAME)
-    s3_prefix = f"{testing_config.TESTDATA_FOLDER}/{testing_config.TESTDATA_VERSION}/"
+    s3_prefix = str(Path(testing_config.TESTDATA_FOLDER) / testing_config.TESTDATA_VERSION) + '/'
     s3.download_prefix(bucket, version_dir, s3_prefix)
