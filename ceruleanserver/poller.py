@@ -27,7 +27,7 @@ def process_sns(snso):
     if server_config.DOWNLOAD_GRDS:
         snso.download_grd_tiff()  # Download Large GeoTiff
     if snso.grd_path and server_config.RUN_ML:
-        infero = INFERO(snso.grd_path, snso.prod_id)
+        infero = INFERO(snso)
         infero.run_inference()
         if infero.has_geometry:
             db.insert_dict_as_row(*infero.inf_db_row())

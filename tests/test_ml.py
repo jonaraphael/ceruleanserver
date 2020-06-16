@@ -4,6 +4,7 @@ import sys
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import Mock
 
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver" / "ml"))
@@ -64,18 +65,18 @@ def FILE_grd_path():
 
 
 def test_infero(FILE_grd_path):
-    infero = INFERO(
-        FILE_grd_path,
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
-    )
+    mocksnso = Mock()
+    mocksnso.configure_mock(grd_path=FILE_grd_path, prod_id="S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"})
+    infero = INFERO(mocksnso)
     assert infero.chip_size_orig == 4096
 
 
 @pytest.fixture
 def infero(FILE_grd_path):
+    mocksnso = Mock()
+    mocksnso.configure_mock(grd_path=FILE_grd_path, prod_id="S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112")
     return INFERO(
-        FILE_grd_path,
-        "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112",
+        mocksnso,
         pkls=["2_18_128_0.676.pkl"],
         thresholds=[128],
     )
