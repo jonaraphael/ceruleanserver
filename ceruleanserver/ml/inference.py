@@ -27,8 +27,7 @@ class INFERO:
 
     def __init__(
         self,
-        grd_path,
-        prod_id,
+        snso,
         pkls=ml_config.ML_PKL_LIST,
         thresholds=ml_config.ML_THRESHOLDS,
         fine_pkl_idx=-1,
@@ -37,8 +36,9 @@ class INFERO:
         overhang=ml_config.OVERHANG,
         geom_path=None,
     ):
-        self.grd_path = Path(grd_path)
-        self.prod_id = prod_id
+        self.snso = snso
+        self.grd_path = snso.grd_path
+        self.prod_id = snso.prod_id
         self.pkls = pkls
         self.thresholds = thresholds
         self.fine_pkl_idx = fine_pkl_idx
@@ -98,6 +98,7 @@ class INFERO:
             "chip_size_orig": f"{self.chip_size_orig}",
             "chip_size_reduced": f"{self.chip_size_reduced}",
             "overhang": f"{self.overhang}",
+            "acquisition_time": f"'{self.snso.sns_msg['startTime']}'",
         }
         return (row, tbl)
 
