@@ -132,7 +132,7 @@ def test_snso_db_row(snso):
     row, tbl = snso.sns_db_row()
     assert tbl == "sns"
     assert row["sns_messageid"] == "'09594279-4fa5-56b7-bdce-1568068e0471'"
-    assert row["starttime"] == "1586966826.0"
+    assert row["starttime"] == "'2020-04-15T16:07:06'"
 
 
 def test_snso_cleanup(snso, FILE_grd_path):
