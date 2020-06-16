@@ -7,7 +7,7 @@ import requests
 import shutil
 from pathlib import Path
 from errors import MissingProductError
-from utils.common import str_to_ts, xml_get
+from utils.common import xml_get
 
 
 class SNSO:
@@ -100,17 +100,17 @@ class SNSO:
         row = {
             "sns_messageid": f"'{self.sns['MessageId']}'",  # Primary Key
             "sns_subject": f"'{self.sns['Subject']}'",
-            "sns_timestamp": f"{str_to_ts(self.sns['Timestamp'])}",
+            "sns_timestamp": f"'{self.sns['Timestamp']}'",
             "grd_id": f"'{self.sns_msg['id']}'",
             "grd_uuid": f"'{self.sns_msg['sciHubId']}'",  # Unique Constraint
             "absoluteorbitnumber": f"{self.sns_msg['absoluteOrbitNumber']}",
             "footprint": f"ST_GeomFromGeoJSON('{json.dumps(self.sns_msg['footprint'])}')",
             "mode": f"'{self.sns_msg['mode']}'",
             "polarization": f"'{self.sns_msg['polarization']}'",
-            "s3ingestion": f"{str_to_ts(self.sns_msg['s3Ingestion'])}",
-            "scihubingestion": f"{str_to_ts(self.sns_msg['sciHubIngestion'])}",
-            "starttime": f"{str_to_ts(self.sns_msg['startTime'])}",
-            "stoptime": f"{str_to_ts(self.sns_msg['stopTime'])}",
+            "s3ingestion": f"'{self.sns_msg['s3Ingestion']}'",
+            "scihubingestion": f"'{self.sns_msg['sciHubIngestion']}'",
+            "starttime": f"'{self.sns_msg['startTime']}'",
+            "stoptime": f"'{self.sns_msg['stopTime']}'",
             "isoceanic": f"{self.isoceanic}",
             "oceanintersection": f"ST_GeomFromGeoJSON('{json.dumps(self.oceanintersection)}')"
             if self.isoceanic
@@ -259,9 +259,9 @@ class SHO:
         tbl = "shgrd"
         row = {
             "summary": f"'{self.grd.get('summary')}'",
-            "beginposition": f"{str_to_ts(xml_get(self.grd.get('date'),'beginposition'))}",
-            "endposition": f"{str_to_ts(xml_get(self.grd.get('date'), 'endposition'))}",
-            "ingestiondate": f"{str_to_ts(xml_get(self.grd.get('date'), 'ingestiondate'))}",
+            "beginposition": f"'{xml_get(self.grd.get('date'),'beginposition')}'",
+            "endposition": f"'{xml_get(self.grd.get('date'), 'endposition')}'",
+            "ingestiondate": f"'{xml_get(self.grd.get('date'), 'ingestiondate')}'",
             "missiondatatakeid": f"{int(xml_get(self.grd.get('int'), 'missiondatatakeid'))}",
             "orbitnumber": f"{int(xml_get(self.grd.get('int'), 'orbitnumber'))}",
             "lastorbitnumber": f"{int(xml_get(self.grd.get('int'), 'lastorbitnumber'))}",

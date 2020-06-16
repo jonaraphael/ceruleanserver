@@ -46,25 +46,6 @@ def xml_get(lst, a, key1="@name", key2="#text"):
     return None
 
 
-def str_to_ts(s):
-    """Turns a string into a timestamp
-    
-    Arguments:
-        s {str} -- one of three formatted strings that occur in SNS or SciHub
-    
-    Returns:
-        timestamp -- seconds since epoch
-    """
-
-    if "Z" not in s:
-        s = s + "Z"  # Assume all timestamps without timezone are UTC #yucko
-    if "." in s:
-        fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
-    else:
-        fmt = "%Y-%m-%dT%H:%M:%SZ"
-    return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc).timestamp()
-
-
 def load_ocean_shape(geom_name=server_config.OCEAN_GEOJSON):
     """Read the ocean GeoJSON into memory once, so that it is accessible for all future functions
 
