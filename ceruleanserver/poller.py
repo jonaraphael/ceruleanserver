@@ -43,7 +43,7 @@ while True:
         QueueUrl=server_config.SQS_URL,
         AttributeNames=["All"],
         MessageAttributeNames=["All"],
-        MaxNumberOfMessages=10,
+        MaxNumberOfMessages=1,
         WaitTimeSeconds=20,
     )
 
