@@ -90,7 +90,7 @@ class INFERO:
         """
         tbl = "inference"
         row = {
-            "grd_id": f"'{self.prod_id}'",
+            "sns_messageid": f"'{self.snso.sns['MessageId']}'",
             "geometry": f"ST_GeomFromGeoJSON('{json.dumps(self.geom['features'][0]['geometry'])}')",
             "pkls": f"'{create_pg_array_string(self.pkls)}'",
             "thresholds": f"'{create_pg_array_string(self.thresholds)}'",
@@ -98,7 +98,6 @@ class INFERO:
             "chip_size_orig": f"{self.chip_size_orig}",
             "chip_size_reduced": f"{self.chip_size_reduced}",
             "overhang": f"{self.overhang}",
-            "acquisition_time": f"'{self.snso.sns_msg['startTime']}'",
         }
         return (row, tbl)
 
