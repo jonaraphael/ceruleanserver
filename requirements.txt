@@ -1,12 +1,17 @@
-flask
 xmltodict
 shapely
-psycopg2
 requests
-pandas
+fastai2=0.0.17
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+# brew install gdal
 gdal
+psycopg2-binary
+
+
+
+flask
+pandas
 pytest
 boto3
-fastai2=0.0.17
 pytorch=1.5
 torchvision=0.6

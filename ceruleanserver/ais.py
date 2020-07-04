@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 import geopandas
 from shapely.geometry import MultiPolygon, LineString
+from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from configs import ais_config
+from configs import ais_config, server_config
 
 
 class AISO:
@@ -54,16 +55,16 @@ class AISO:
 
             self.big_query_str = f"""
                 SELECT
-                a.mmsi AS mmsi,
-                a.timestamp AS timestamp,
-                a.speed AS speed,
-                a.lat AS lat,
-                a.lon AS lon,
-                b.shipname AS shipname,
-                b.country_name AS country_name,
-                b.callsign AS callsign,
-                b.imo AS imo,
-                b.shiptype_text AS shiptype_text
+                    a.mmsi AS mmsi,
+                    a.timestamp AS timestamp,
+                    a.speed AS speed,
+                    a.lat AS lat,
+                    a.lon AS lon,
+                    b.shipname AS shipname,
+                    b.country_name AS country_name,
+                    b.callsign AS callsign,
+                    b.imo AS imo,
+                    b.shiptype_text AS shiptype_text
                 FROM (
                     SELECT
                         mmsi,
@@ -83,23 +84,27 @@ class AISO:
                 ) a
                 LEFT JOIN (
                     SELECT
-                        *
+                        shipname,
+                        country_name,
+                        callsign,
+                        imo,
+                        shiptype_text
                     FROM
                         [world-fishing-827:gfw_research_archived.vessel_info_20170717]
                     WHERE
                         year = 2016 
                 ) b
                 ON
-                a.mmsi = b.mmsi
+                    a.mmsi = b.mmsi
             """
         return self.big_query_str
     
     def run_big_query(self):
         # https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/insert
         # https://cloud.google.com/bigquery/docs/running-jobs#bigquery_create_job-python
-        res = XXX_BIG_QUERY_API_CALL(self.get_big_query_str())
+        self.ais_path = XXX_BIG_QUERY_API_CALL(self.get_big_query_str())
         
-        df = pd.read_csv(ais_path, parse_dates=['timestamp']).sort_values('timestamp')
+        df = pd.read_csv(self.ais_path, parse_dates=['timestamp']).sort_values('timestamp')
         self.ais_df = geopandas.GeoDataFrame(df,geometry=geopandas.points_from_xy(df.lon, df.lat))
 
     def find_coincidents(self):
@@ -343,4 +348,73 @@ for fname in fnames:
         display(coincidents[mmsi])
         # Store in a database: [MMSI_info, Slick_Multipolygon, AIS_LineString, Coincidence_Score]
     
+# %%
+
+
+import geopandas
+import pandas as pd
+from pathlib import Path
+import json
+from shapely.geometry import shape
+from utils.common import load_shape
+sys.path.append(str(Path(__file__).parent.parent))
+from configs import ais_config, server_config
+
+
+countries = load_shape(server_config.COUNTRIES_GEOJSON)
+cg = geopandas.GeoDataFrame(countries)
+cg['geometry'] = [shape(c) for c in cg['geometry']]
+
+fnames = [
+    "S1A_IW_GRDH_1SDV_20190809T090339_20190809T090408_028490_03386D_FC54",
+    "S1A_IW_GRDH_1SDV_20190719T075331_20190719T075356_028183_032EFB_15DB",
+    "S1A_IW_GRDH_1SDV_20190724T080108_20190724T080133_028256_033120_F0AB",
+]
+
+for fname in fnames:
+    slick_path = Path(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/{fname}/slick_192-192-32-128conf.geojson")
+    slick_multipoly = geopandas.read_file(slick_path).geometry.iloc[0]
+    if slick_multipoly:
+        cg['dist'] = cg['geometry'].distance(slick_multipoly)
+        closest = cg['dist'].idxmin()
+        country_name = cg['properties'].iloc[closest]['sovereignt']
+        min_dist = round(cg['dist'].min()*100, 0)
+        print(min_dist, "km from", country_name)
+
+# %%
+
+# import geopandas
+# from utils.common import load_shape, create_pg_array_string
+# import json
+# from pathlib import Path
+# sys.path.append(str(Path(__file__).parent.parent))
+# from configs import ais_config, server_config
+# from shapely.geometry import shape
+# from data import DBConnection
+
+
+# eez = load_shape(server_config.EEZ_GEOJSON)
+# eez = geopandas.GeoDataFrame(eez)
+# # eez['geometry'] = [shape(e) for e in eez['geometry']]
+
+# db = db = DBConnection()  # Database Object
+
+# for row in eez.itertuples():
+#     sovs = [row.properties[sov] for sov in ['SOVEREIGN1', 'SOVEREIGN2', 'SOVEREIGN3'] if row.properties[sov] is not None]
+#     geom = row.geometry
+#     # geom = geom.update({"crs" : {"properties" : {"name" : "urn:ogc:def:crs:EPSG:8.8.1:4326"}}}) # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
+
+#     tbl = "eez"
+#     row = {
+#         "mrgid": f"{int(row.properties['MRGID'])}",
+#         "geoname": f"'{row.properties['GEONAME']}'",
+#         "pol_type": f"'{row.properties['POL_TYPE']}'",
+#         "sovereigns": f"'{create_pg_array_string(sovs)}'",
+#         "source": f"'https://www.marineregions.org/downloads.php v11'",
+#         "geometry": f"ST_GeomFromGeoJSON('{json.dumps(geom)}')",
+
+#     }
+#     db.insert_dict_as_row(row, tbl)
+
+
 # %%

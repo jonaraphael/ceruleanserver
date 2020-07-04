@@ -4,12 +4,12 @@ from data import DBConnection
 from classes import SHO, SNSO
 from configs import server_config, ml_config
 from ml.inference import INFERO
-from utils.common import load_ocean_shape
+from utils.common import load_shape
 import boto3
 
 client = boto3.client("sqs", region_name="eu-central-1")
 db = DBConnection()  # Database Object
-ocean_shape = load_ocean_shape()  # Ocean Geometry
+ocean_shape = load_shape(server_config.OCEAN_GEOJSON, True)  # Ocean Geometry
 
 
 def process_sns(snso):
