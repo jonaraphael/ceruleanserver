@@ -341,10 +341,10 @@ for fname in fnames:
     for mmsi in coincidents:
         mmsi_multi = MultiPolygon([slick_multipoly[poly_id[0]] for poly_id in coincidents[mmsi]]) # Combine polys that share a mmsi
         mmsi_string = LineString([p for p in ais[ais['mmsi']==mmsi]['geometry']]) # Turn this AIS track into a linestring for storage as well
-        mmsi_info = ais[ais['mmsi']==mmsi].groupby(['mmsi']).agg(pd.Series.mode).loc[mmsi][['speed', 'receiver_type', 'receiver', 'status']] # Pull out the most common values from interesting columns for the culprit
+        # mmsi_info = ais[ais['mmsi']==mmsi].groupby(['mmsi']).agg(pd.Series.mode).loc[mmsi][['speed', 'receiver_type', 'receiver', 'status']] # Pull out the most common values from interesting columns for the culprit
         display(mmsi_multi)
         display(mmsi_string)
-        display(mmsi_info)
+        # display(mmsi_info)
         display(coincidents[mmsi])
         # Store in a database: [MMSI_info, Slick_Multipolygon, AIS_LineString, Coincidence_Score]
     
@@ -361,10 +361,11 @@ sys.path.append(str(Path(__file__).parent.parent))
 from configs import ais_config, server_config
 
 
-countries = load_shape(server_config.COUNTRIES_GEOJSON)
-cg = geopandas.GeoDataFrame(countries)
-cg['geometry'] = [shape(c) for c in cg['geometry']]
+eezs = load_shape(server_config.EEZ_GEOJSON)
+eezdf = geopandas.GeoDataFrame(eezs)
+eezdf['geometry'] = [shape(c) for c in eezdf['geometry']]
 
+#%%
 fnames = [
     "S1A_IW_GRDH_1SDV_20190809T090339_20190809T090408_028490_03386D_FC54",
     "S1A_IW_GRDH_1SDV_20190719T075331_20190719T075356_028183_032EFB_15DB",
@@ -375,11 +376,11 @@ for fname in fnames:
     slick_path = Path(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/{fname}/slick_192-192-32-128conf.geojson")
     slick_multipoly = geopandas.read_file(slick_path).geometry.iloc[0]
     if slick_multipoly:
-        cg['dist'] = cg['geometry'].distance(slick_multipoly)
-        closest = cg['dist'].idxmin()
-        country_name = cg['properties'].iloc[closest]['sovereignt']
-        min_dist = round(cg['dist'].min()*100, 0)
-        print(min_dist, "km from", country_name)
+        eezdf['dist'] = eezdf['geometry'].distance(slick_multipoly)
+        closest = eezdf['dist'].idxmin()
+        eez_name = eezdf['properties'].iloc[closest]['GEONAME']
+        min_dist = round(eezdf['dist'].min()*100, 0)
+        print(min_dist, "km from", eez_name)
 
 # %%
 

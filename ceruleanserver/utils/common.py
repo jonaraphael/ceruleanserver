@@ -62,7 +62,7 @@ def load_shape(geom_name, as_multipolygon=False):
         # print(download_str)
         run(download_str, shell=True)
 
-    with open(geom_path) as f:
+    with open(geom_path, encoding='utf-8') as f:
         geom = json.load(f)["features"]
     if as_multipolygon:
         geom = sh.GeometryCollection(
