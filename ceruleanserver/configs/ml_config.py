@@ -16,6 +16,7 @@ START_OVER = (
     True  # Do we delete all files before creating chips, or pick up where we left off
 )
 OVERHANG = False  # Should some chips hang over the edge of the original image (and therefore might have very few useful pixels)
+USE_OCN = False
 RECORD_NONZEROS = (
     False  # Should the images with non-zero average pixel value be recorded in a CSV
 )

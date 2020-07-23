@@ -152,7 +152,7 @@ def test_sho():
         == "S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112"
     )
     assert (
-        sho.ocn_id
+        sho.ocn.pid
         == "S1A_IW_OCN__2SDV_20200406T194140_20200406T194205_032011_03B2AB_4913"
     )
 

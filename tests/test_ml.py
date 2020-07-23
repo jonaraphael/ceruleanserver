@@ -77,7 +77,7 @@ def infero(FILE_grd_path):
     mocksnso.configure_mock(grd_path=FILE_grd_path, prod_id="S1A_IW_GRDH_1SDV_20200406T194140_20200406T194205_032011_03B2AB_C112")
     return INFERO(
         mocksnso,
-        pkls=["2_18_128_0.676.pkl"],
+        ml_pkls=["2_18_128_0.676.pkl"],
         thresholds=[128],
     )
 
@@ -91,7 +91,6 @@ def test_run_inference(infero):
     assert infero.thresholds == [128]
     assert infero.geom_path.name == "slick_128conf.geojson"
     assert infero.geom_path.exists()
-    assert infero.has_geometry
     row, tbl = infero.inf_db_row()
     assert tbl == "inference"
     assert infero.geom["features"][0]["geometry"]["coordinates"][0][0][0][0] > 140

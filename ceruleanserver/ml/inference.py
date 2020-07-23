@@ -3,7 +3,13 @@ from fastai2.learner import load_learner
 from subprocess import run, PIPE
 import sys
 import json
-from ml.vector_processing import unify, sparsify, intersection
+from ml.vector_processing import (
+    unify,
+    sparsify,
+    intersection,
+    shape_to_ewkt,
+    shapely_to_geojson,
+)
 from ml.raster_processing import (
     inference_to_poly,
     merge_chips,
@@ -21,85 +27,9 @@ from configs import (  # pylint: disable=import-error
 from utils.common import clear, create_pg_array_string
 
 
-class INFERO:
-    """A Class that organizes information about an Inference Object
-    """
-
-    def __init__(
-        self,
-        snso,
-        pkls=ml_config.ML_PKL_LIST,
-        thresholds=ml_config.ML_THRESHOLDS,
-        fine_pkl_idx=-1,
-        chip_size_orig=ml_config.CHIP_SIZE_ORIG,
-        chip_size_reduced=ml_config.CHIP_SIZE_REDUCED,
-        overhang=ml_config.OVERHANG,
-        geom_path=None,
-    ):
-        self.snso = snso
-        self.grd_path = snso.grd_path
-        self.prod_id = snso.prod_id
-        self.pkls = pkls
-        self.thresholds = thresholds
-        self.fine_pkl_idx = fine_pkl_idx
-        self.chip_size_orig = chip_size_orig
-        self.chip_size_reduced = chip_size_reduced
-        self.overhang = overhang
-
-        self.geom_path = geom_path or self.grd_path.with_name(
-            f"slick_{'-'.join([str(t) for t in self.thresholds])}conf.geojson"
-        )
-        self.has_geometry = None
-
-    def __repr__(self):
-        return f"<INFERObject: {self.prod_id or self.grd_path.name}>"
-
-    def run_inference(self):
-        multi_machine(self)
-        with open(self.geom_path) as f:
-            self.geom = json.load(f)
-        self.geom["crs"]["properties"][
-            "name"
-        ] = "urn:ogc:def:crs:EPSG:8.8.1:4326"  # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
-        self.geom["features"][0]["geometry"]["crs"] = self.geom[
-            "crs"
-        ]  # Copy the projection into the multipolygon geometry so that the database doesn't lose the geographic context
-        self.has_geometry = any(self.geom["features"][0]["geometry"]["coordinates"])
-        return self.geom_path
-
-    def save_small_to_s3(self, pct=0.25):
-        small_path = self.grd_path.with_name("small.tiff")
-        resize(self.grd_path, small_path, pct)
-        s3_raster_path = f"s3://skytruth-cerulean/outputs/rasters/{self.prod_id}.tiff"
-        cmd = f"aws s3 cp {small_path} {s3_raster_path}"
-        run(cmd, shell=True)
-        clear(small_path)
-
-    def save_poly_to_s3(self):
-        s3_vector_path = (
-            f"s3://skytruth-cerulean/outputs/vectors/{self.prod_id}.geojson"
-        )
-        cmd = f"aws s3 cp {self.geom_path} {s3_vector_path}"
-        run(cmd, shell=True)
-
-    def inf_db_row(self):
-        """Creates a dictionary that aligns with our inference DB columns
-        
-        Returns:
-            dict -- key for each column in our inference DB, value from this SNS's content
-        """
-        tbl = "inference"
-        row = {
-            "sns_messageid": f"'{self.snso.sns['MessageId']}'",
-            "geometry": f"ST_GeomFromGeoJSON('{json.dumps(self.geom['features'][0]['geometry'])}')",
-            "pkls": f"'{create_pg_array_string(self.pkls)}'",
-            "thresholds": f"'{create_pg_array_string(self.thresholds)}'",
-            "fine_pkl_idx": f"{self.fine_pkl_idx}",
-            "chip_size_orig": f"{self.chip_size_orig}",
-            "chip_size_reduced": f"{self.chip_size_reduced}",
-            "overhang": f"{self.overhang}",
-        }
-        return (row, tbl)
+def run_inference(infero):
+    multi_machine(infero)
+    return infero.geom_path
 
 
 def multi_machine(infero, out_path=None):
@@ -118,19 +48,18 @@ def multi_machine(infero, out_path=None):
     Returns:
         Path -- out_path
     """
-    path = infero.grd_path.parent
+    working_dir = infero.grd_path.parent
+    out_path = out_path or infero.geom_path
 
     if not isinstance(infero.thresholds, list):
-        infero.thresholds = [infero.thresholds] * len(infero.pkls)
-
-    out_path = out_path or infero.geom_path
+        infero.thresholds = [infero.thresholds] * len(infero.ml_pkls)
 
     #  Run machine learning on vv_grd to make 3 contours
     geojson_paths = []
-    for i, pkl in enumerate(infero.pkls):
+    for i, pkl in enumerate(infero.ml_pkls):
         if server_config.VERBOSE:
             print("Running Inference on", pkl)
-        inference_path = (path / pkl).with_suffix(".tiff")
+        inference_path = (working_dir / pkl).with_suffix(".tiff")
 
         if not inference_path.exists() and server_config.RUN_ML:
             learner = load_learner_from_s3(pkl, False)
@@ -139,10 +68,11 @@ def multi_machine(infero, out_path=None):
         geojson_path = inference_to_poly(inference_path, infero.thresholds[i])
         geojson_paths += [geojson_path]
 
-    union_path = unify(geojson_paths)
-    coarse_path = sparsify(union_path, geojson_paths)
-    out_path = intersection(geojson_paths[infero.fine_pkl_idx], coarse_path, out_path)
-    clear(coarse_path)
+    union = unify(geojson_paths) # Returnds shapely multipolygon
+    sparse = sparsify(union, geojson_paths)
+    inter = intersection(geojson_paths[infero.fine_pkl_idx], sparse)
+    infero.polys = [poly for poly in inter]
+    shapely_to_geojson(inter, out_path)
     return out_path
 
 

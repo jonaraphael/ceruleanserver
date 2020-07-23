@@ -1,5 +1,5 @@
-ACCESS_KEY = "placeholder"
-SECRET_KEY = "placeholder"
+ACCESS_KEY = "placeholder" # Include this in your local_config
+SECRET_KEY = "placeholder" # Include this in your local_config
 
 S3_BUCKET_NAME = "skytruth-cerulean"
 S3_SENTINEL_CHIPS_PATH = "labeled_data/chips"
