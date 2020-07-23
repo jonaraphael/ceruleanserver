@@ -112,7 +112,7 @@ for pid in set(prods):
         with zipfile.ZipFile(ocnzip_path, "r") as zip_ref:
             zip_ref.extractall(ocnzip_path.parent)
         nc_path = next(
-            (ocnzip_path.with_name(sho.ocn_id + ".SAFE") / "measurement").glob("*.nc")
+            (ocnzip_path.with_name(sho.ocn.pid + ".SAFE") / "measurement").glob("*.nc")
         )  # Grab the first nc file (XXX assuming there will always be exactly 1)
         ocn_path = nc_to_png(nc_path, bands, target_size)
         img_to_chips(

@@ -13,6 +13,8 @@ CLEANUP_SNS = True
 DOWNLOAD_GRDS = True
 RUN_ML = True
 UPDATE_ML = True
+COUNTRIES_GEOJSON = "Countries.geojson"
+EEZ_GEOJSON = "eez_v11_simplified_noholes.geojson"
 OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
 BLOCK_REPEAT_SNS = True
 SQS_URL = "https://sqs.eu-central-1.amazonaws.com/162277344632/New_Machinable"
@@ -22,8 +24,10 @@ UPLOAD_OUTPUTS = True
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"
 DB_USER = "postgres"
 DB_PASSWORD = "postgres"
-DB_DATABASE = "db_slick"
+DB_DATABASE = "cerulean"
 DB_PORT = "5432"
+DB_TYPE = "postgresql"
+ECHO_SQL = False
 # DEBUG_DB_ACCESS switches on/off all DB functionality if in debug mode
 DEBUG_DB_ACCESS = True
 
