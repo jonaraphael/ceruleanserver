@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
-from db_connection import DBConnection
 from process import process_sns
 
 
@@ -30,6 +29,4 @@ test_json = {
     ]
 }
 
-db = DBConnection()  # Database Object
-
-process_sns(test_json['Records'][0]["Sns"], db)
+process_sns(test_json['Records'][0]["Sns"])

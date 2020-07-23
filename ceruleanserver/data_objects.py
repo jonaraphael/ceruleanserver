@@ -8,12 +8,12 @@ from pathlib import Path
 from errors import MissingProductError
 from utils.common import xml_get, clear
 from utils.s3 import s3copy
-from alchemy import Sns, Grd, Ocn, Inference, Posi_Poly
+from alchemy import get_or_create, Sns, Grd, Ocn, Inference, Posi_Poly
 from ml.raster_processing import resize
 from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt
 
 
-class Sns_:
+class Sns_Ext:
     """A Class that extends the Sns class and organizes information about the SNS
     """
 
@@ -22,8 +22,11 @@ class Sns_:
         self.messageid = raw["MessageId"]
         self.subject = raw["Subject"]
         self.timestamp = raw["Timestamp"]
-        self.db = Sns(
-            messageid=self.messageid, subject=self.subject, timestamp=self.timestamp
+        self.db_base = get_or_create(
+            Sns,
+            messageid=self.messageid,
+            subject=self.subject,
+            timestamp=self.timestamp,
         )
 
         # Calculated
@@ -31,7 +34,7 @@ class Sns_:
         self.message = json.loads(raw["Message"])
 
 
-class Grd_:
+class Grd_Ext:
     def __init__(self, sns):
         # DB Columns
         self.sns = sns
@@ -45,8 +48,9 @@ class Grd_:
         self.starttime = sns.message["startTime"]
         self.stoptime = sns.message["stopTime"]
         self.geometry = geojson_to_ewkt(sns.message["footprint"])
-        self.db = Grd(
-            sns=self.sns.db,
+        self.db_base = get_or_create(
+            Grd,
+            sns=self.sns.db_base,
             pid=self.pid,
             uuid=self.uuid,
             absoluteorbitnumber=self.absoluteorbitnumber,
@@ -62,10 +66,10 @@ class Grd_:
         # Calculated
         self.sns_msg = sns.message
         self.s3_dir = f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/measurement/"
+        self.load_from_field = "pid"
 
         # Placeholders
         self.filepath = None
-        self.is_downloaded = False
 
     def download_grd_tiff(self, dest_dir=None):
         """Creates a local directory and downloads a GeoTiff (often ~700MB)
@@ -90,7 +94,7 @@ class Grd_:
             shutil.rmtree(self.file_path.parent)
 
 
-class Ocn_:
+class Ocn_Ext:
     def __init__(self, grd, ocn_xml):
         # DB Columns
         self.grd = grd
@@ -100,8 +104,9 @@ class Ocn_:
         self.producttype = xml_get(ocn_xml.get("str"), "producttype")
         self.filename = xml_get(ocn_xml.get("str"), "filename")
 
-        self.db = Ocn(
-            grd=self.grd.db,
+        self.db_base = get_or_create(
+            Ocn,
+            grd=self.grd.db_base,
             pid=self.pid,
             uuid=self.uuid,
             summary=self.summary,
@@ -113,7 +118,7 @@ class Ocn_:
         self.file_path = None
 
 
-class Inference_:
+class Inference_Ext:
     """A Class that extends the Inference class and organizes information about the ml outputs
     """
 
@@ -139,9 +144,10 @@ class Inference_:
         self.chip_size_orig = chip_size_orig
         self.chip_size_reduced = chip_size_reduced
         self.overhang = overhang
-        self.db = Inference(
-            grd=self.grd.db,
-            ocn=self.ocn.db if use_ocn else None,
+        self.db_base = get_or_create(
+            Inference,
+            grd=self.grd.db_base,
+            ocn=self.ocn.db_base if use_ocn else None,
             ml_pkls=self.ml_pkls,
             thresholds=self.thresholds,
             fine_pkl_idx=self.fine_pkl_idx,
@@ -175,7 +181,7 @@ class Inference_:
         run(cmd, shell=True)
 
 
-class Posi_Poly_:
+class Posi_Poly_Ext:
     """A Class that extends the Posi Poly class and organizes information about the polygons
     """
 
@@ -183,8 +189,10 @@ class Posi_Poly_:
         # DB Columns
         self.inference = inf
         self.geometry = geoshape
-        self.db = Posi_Poly(
-            inference=self.inference.db, geometry=shape_to_ewkt(self.geometry)
+        self.db_base = get_or_create(
+            Posi_Poly,
+            inference=self.inference.db_base,
+            geometry=shape_to_ewkt(self.geometry),
         )
 
 
@@ -233,7 +241,7 @@ class SHO:
                 )
 
             if self.ocn_xml:
-                self.ocn = Ocn_(grd, self.ocn_xml)
+                self.ocn = Ocn_Ext(grd, self.ocn_xml)
                 self.URLs[
                     "download_ocn"
                 ] = f"https://{user}:{pwd}@scihub.copernicus.eu/dhus/odata/v1/Products('{self.ocn.uuid}')/%24value"

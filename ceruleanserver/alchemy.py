@@ -13,18 +13,39 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.exc import InvalidRequestError, IntegrityError
 from geoalchemy2 import Geometry
 from configs import server_config
+from db_connection import DBConnection
 
 Base = declarative_base()
+db = DBConnection()  # Database Object
+
+
+def get_or_create(model, **kwargs):
+    instance = (
+        db.sess.query(model).filter_by(**kwargs).first()
+    )  # XXX Modify this to focus on unique columns?
+    if not instance:
+        instance = model(**kwargs)
+        db.sess.add(
+            instance
+        )  # This leaves ID blank, whereas successful query fills the id
+    return instance
+
+
+def commit():
+    try:
+        db.sess.commit()
+    except (InvalidRequestError, IntegrityError) as e:
+        print(e)
+        db.sess.rollback()
+        print("Rolled Back")
 
 
 class Base_Geo(Base):
     __abstract__ = True
     geometry = Column(Geometry())
-
-    def geo_to_json(self):
-        pass
 
 
 class Sns(Base):
@@ -179,4 +200,3 @@ class Eez(Base_Geo):
 
     def __repr__(self):
         return f"<{self.__tablename__} {self.id}: {self.mrgid, self.geoname, self.pol_type, self.sovereigns}>"
-

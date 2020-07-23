@@ -21,6 +21,7 @@ class DBConnection:
         dbtype=server_config.DB_TYPE,
     ):
         self.engine = create_engine(
-            f"{dbtype}://{user}:{password}@{host}:{port}/{database}", echo=server_config.ECHO_SQL,
+            f"{dbtype}://{user}:{password}@{host}:{port}/{database}",
+            echo=server_config.ECHO_SQL,
         )
         self.sess = sessionmaker(bind=self.engine)()
