@@ -23,14 +23,19 @@ db = DBConnection()  # Database Object
 
 
 def get_or_create(model, **kwargs):
-    instance = (
-        db.sess.query(model).filter_by(**kwargs).first()
-    )  # XXX Modify this to focus on unique columns?
+    try:
+        instance = db.sess.query(model).filter_by(**kwargs).first()
+        # This fills in the ID blank of the model, as well as other objects in the session, as it autoflushes
+    except (IntegrityError) as e:
+        # This happens if another object breaks the assumed one-to-one relationship (e.g. multiple GRDs per OCN)
+        print(e)
+        db.sess.rollback()
+        print("Rolled Back")
+
     if not instance:
         instance = model(**kwargs)
-        db.sess.add(
-            instance
-        )  # This leaves ID blank, whereas successful query fills the id
+        db.sess.add(instance)
+        # This leaves ID blank, whereas successful query fills the id
     return instance
 
 
