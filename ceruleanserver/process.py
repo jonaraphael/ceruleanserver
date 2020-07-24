@@ -16,8 +16,15 @@ def process_sns(raw):
         return  # The SNS exists in our table already but we don't want to reprocess it
 
     grd = Grd_Ext(sns)
-    ocn = SHO(grd).ocn  # Not all GRDs sent via SNS exist on SciHub?!
-
+    ocn = None
+    # ocn = SHO(grd).ocn  
+    # XXX Not all GRDs sent via SNS exist on SciHub?!
+    # XXX There can be multiple GRDs per OCN e.g. 
+    # S1A_IW_OCN__2SDV_20200720T165734_20200720T165759_033541_03E2F9_4FA6
+    # maps to
+    # S1A_IW_GRDH_1SDV_20200720T165734_20200720T165759_033541_03E2F9_492B and
+    # S1A_IW_GRDH_1SDV_20200720T165734_20200720T165759_033541_03E2F9_C621
+    
     if server_config.DOWNLOAD_GRDS:
         grd.download_grd_tiff()  # Download Large GeoTiff
 
