@@ -1,6 +1,6 @@
 #%%
 from pathlib import Path
-from classes import SHO
+from data_objects import SHO
 from ml.inference import INFERO
 from configs import path_config, server_config
 from unittest.mock import Mock

@@ -12,7 +12,7 @@ def lambda_handler(event, context):
         scene_poly = sh.polygon.Polygon(msg["footprint"]["coordinates"][0][0])
 
         is_highdef = "H" == msg["id"][10]
-        is_vv = "V" == msg["id"][15]
+        is_vv = "V" == msg["id"][15] # we don't want to process any polarization other than vv XXX This is hardcoded in the server, where we look for a vv.grd file
         is_oceanic = scene_poly.intersects(ocean_poly)
 
         if is_highdef and is_vv and is_oceanic:

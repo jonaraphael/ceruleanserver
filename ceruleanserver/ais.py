@@ -398,24 +398,20 @@ for fname in fnames:
 # eez = geopandas.GeoDataFrame(eez)
 # # eez['geometry'] = [shape(e) for e in eez['geometry']]
 
-# db = db = DBConnection()  # Database Object
+# db = DBConnection()  # Database Object
 
 # for row in eez.itertuples():
 #     sovs = [row.properties[sov] for sov in ['SOVEREIGN1', 'SOVEREIGN2', 'SOVEREIGN3'] if row.properties[sov] is not None]
 #     geom = row.geometry
 #     # geom = geom.update({"crs" : {"properties" : {"name" : "urn:ogc:def:crs:EPSG:8.8.1:4326"}}}) # This is equivalent to the existing projectionn, but is recognized by postgres as mappable, so slightly preferred.
 
-#     tbl = "eez"
-#     row = {
-#         "mrgid": f"{int(row.properties['MRGID'])}",
-#         "geoname": f"'{row.properties['GEONAME']}'",
-#         "pol_type": f"'{row.properties['POL_TYPE']}'",
-#         "sovereigns": f"'{create_pg_array_string(sovs)}'",
-#         "source": f"'https://www.marineregions.org/downloads.php v11'",
-#         "geometry": f"ST_GeomFromGeoJSON('{json.dumps(geom)}')",
-
-#     }
-#     db.insert_dict_as_row(row, tbl)
-
-
-# %%
+#     e = Eez(
+#         mrgid=int(row.properties['MRGID']),
+#         geoname=row.properties['GEONAME'],
+#         pol_type=row.properties['POL_TYPE'],
+#         sovereigns=sovs,
+#         geometry="SRID=4326;"+sh.shape(row.geometry).wkt
+#     )
+#     db.sess.add(e)
+# db.sess.commit()
+# db.sess.close()
