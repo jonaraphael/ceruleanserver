@@ -22,7 +22,7 @@ for pid in pids:
     grd_path = Path(path_config.LOCAL_DIR) / "temp" / pid / "vv_grd.tiff"
     if (
         not grd_path.exists()
-    ) and server_config.DOWNLOAD_GRDS:  # pylint: disable=no-member
+    ) and server_config.DOWNLOAD_GRDS: # pylint: disable=no-member
         SHO(pid).download_grd_tiff_from_s3(grd_path)
     mocksnso.configure_mock(grd_path=grd_path, prod_id=pid)
     out_path = INFERO(mocksnso).run_inference()

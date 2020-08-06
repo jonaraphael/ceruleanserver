@@ -19,6 +19,7 @@ OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
 BLOCK_REPEAT_SNS = True
 SQS_URL = "https://sqs.eu-central-1.amazonaws.com/162277344632/New_Machinable"
 UPLOAD_OUTPUTS = True
+WKT_ROUNDING = 5 # -1 means don't round
 
 # Database connection settings
 DB_HOST = "db-slick.cboaxrzskot9.eu-central-1.rds.amazonaws.com"
