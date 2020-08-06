@@ -1,8 +1,10 @@
 from pathlib import Path
 import sys
 import shapely.geometry as sh
+from shapely import wkt, wkb
 from shapely.ops import unary_union
 import json
+from geoalchemy2.elements import WKBElement, WKTElement
 
 sys.path.append(str(Path(__file__).parent.parent))
 from configs import server_config
@@ -35,7 +37,7 @@ def unify(json_paths):
     for path in json_paths:
         with open(path) as f:
             features = json.load(f)["features"]
-        polys += [sh.shape(feat["geometry"]).buffer(0) for feat in features]
+        polys += [sh.shape(feat["geometry"]).buffer(0) for feat in features if sh.shape(feat["geometry"]).geom_type in ["Polygon", "Multipolygon"]] # Ignore points and lines
     uni = unary_union(polys)
     if isinstance(uni, sh.Polygon):
         uni = sh.MultiPolygon([uni])
@@ -112,7 +114,7 @@ def geojson_to_ewkt(geojson, srid="4326"):
     Returns:
         str: A database-friendly text version
     """
-    return f"SRID={srid};{sh.shape(geojson).wkt}"
+    return f"SRID={srid};{wkt.dumps(sh.shape(geojson), rounding_precision=server_config.WKT_ROUNDING)}"
 
 
 def shape_to_ewkt(shapely_shape, srid="4326"):
@@ -125,4 +127,23 @@ def shape_to_ewkt(shapely_shape, srid="4326"):
     Returns:
         str: A database-friendly text version
     """
-    return f"SRID={srid};{shapely_shape.wkt}"
+    return f"SRID={srid};{wkt.dumps(shapely_shape, rounding_precision=server_config.WKT_ROUNDING)}"
+
+
+def wk_to_shapely(element):
+    """
+    https://geoalchemy-2.readthedocs.io/en/0.2.6/_modules/geoalchemy2/shape.html
+    Function to convert a :class:`geoalchemy2.types.SpatialElement`
+    to a Shapely geometry.
+
+    Example::
+
+        lake = Session.query(Lake).get(1)
+        polygon = to_shape(lake.geom)
+    """
+    if isinstance(element, WKBElement):
+        return wkb.loads(bytes(element.data))
+    elif isinstance(element, WKTElement):
+        return wkt.loads(element.data)
+    elif isinstance(element, str):
+        return wkt.loads(element.split(";")[-1])

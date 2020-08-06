@@ -19,4 +19,6 @@ while True:
     if response.get("Messages"):
         for msg in response["Messages"]:
             process_sns(json.loads(msg["Body"])["Records"][0]["Sns"])
-            client.delete_message(QueueUrl=server_config.SQS_URL, ReceiptHandle=msg["ReceiptHandle"])
+            client.delete_message(
+                QueueUrl=server_config.SQS_URL, ReceiptHandle=msg["ReceiptHandle"]
+            )
