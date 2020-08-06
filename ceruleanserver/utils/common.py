@@ -103,3 +103,7 @@ def create_pg_array_string(lst):
     else:
         print("ERROR -- Unkown type being turned into string")
     return out
+
+def to_standard_datetime_str(dt):
+    datetime_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime_str

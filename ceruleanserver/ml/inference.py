@@ -7,7 +7,6 @@ from ml.vector_processing import (
     unify,
     sparsify,
     intersection,
-    shape_to_ewkt,
     shapely_to_geojson,
 )
 from ml.raster_processing import (

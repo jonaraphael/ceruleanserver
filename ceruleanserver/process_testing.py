@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / "ceruleanserver"))
-from process import process_sns
+from process import process_sns # pylint: disable=no-name-in-module
 
 
 test_json = {
