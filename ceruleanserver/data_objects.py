@@ -23,6 +23,7 @@ from alchemy import (
     Slick,
     Eez,
 )
+from sqlalchemy import inspect
 from ml.raster_processing import resize
 from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt
 import shapely.geometry as sh
@@ -163,9 +164,10 @@ class Posi_Poly_Ext(Posi_Poly):
             self.slick = slick
             self.geometry = shape_to_ewkt(geoshape)
 
-    def calc_eezs(self, sess):
+    def calc_eezs(self):
         # XXX This set command isn't working.
-        eez_ids = set([e.id for e in self.get_intersecting_objects(sess, Eez)])
+        sess = inspect(self).session
+        eez_ids = set([e.id for e in self.get_intersecting_objects(Eez)])
         return [Eez_Ext.from_id(e_id, sess) for e_id in eez_ids]
 
 
@@ -230,14 +232,12 @@ class Slick_Ext(Slick):
         self.geometry = shape_to_ewkt(self.calc_geometry())
         self.coincidents = self.calc_coincidents()
 
-    def to_api_dict(
-        self, sess
-    ):  # XXXHELP Should the session just be a global variable?
+    def to_api_dict(self):
         res = {
             "id": self.id,
             "timestamp": to_standard_datetime_str(self.timestamp),
             "geometry": self.geometry,
-            "eezs": [eez.to_api_dict() for eez in self.calc_eezs(sess)],
+            "eezs": [eez.to_api_dict() for eez in self.calc_eezs()],
             "coincidents": [
                 coincident.to_api_dict() for coincident in self.coincidents
             ],
@@ -252,10 +252,11 @@ class Slick_Ext(Slick):
             [to_shape(poly.geometry) for poly in self.posi_polys]
         )
 
-    def calc_eezs(self, sess):
+    def calc_eezs(self):
+        sess = inspect(self).session
         eez_ids = []
         for poly in self.posi_polys:
-            eez_ids += [e.id for e in poly.calc_eezs(sess)]
+            eez_ids += [e.id for e in poly.calc_eezs()]
         return [Eez_Ext.from_id(e_id, sess) for e_id in set(eez_ids)]
 
     def calc_coincidents(self):
@@ -281,7 +282,7 @@ class SHO:
     """A class that organizes information about content stored on SciHub
     """
 
-    def __init__(self, grd, sess, user=server_config.SH_USER, pwd=server_config.SH_PWD):
+    def __init__(self, grd, user=server_config.SH_USER, pwd=server_config.SH_PWD):
         self.prod_id = grd.pid
         self.generic_id = self.prod_id[:7] + "????_?" + self.prod_id[13:-4] + "*"
         self.URLs = {

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     Numeric,
 )
+from sqlalchemy import func, inspect
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -26,17 +27,19 @@ class SmartBase(Base):
     loaded_from_db = False
 
     # XXXHELP Why doesn't the load pathway work??!
-    def load_or_insert(self, sess, filter_attrs=[]):
+    def load_or_insert(self, filter_attrs=[]):
         """ Looks for a single row in the DB that matches kwargs, returns it or creates a new row
         Returns:
             Alchemy Instance: An instance of the class specified
         """
-        self.load(sess, filter_attrs=filter_attrs)
+        sess = inspect(self).session
+        self.load(filter_attrs=filter_attrs)
         sess.add(self)
 
-    def load(self, sess, filter_attrs=[]):
+    def load(self, filter_attrs=[]):
         """ Gets an object from a table in the db
         """
+        sess = inspect(self).session
         filters = {attr: getattr(self, attr) for attr in filter_attrs}
         q = sess.query(self.__class__).filter_by(**filters)
         instance = q.one_or_none()
@@ -60,7 +63,8 @@ class SmartGeo(SmartBase):
     __abstract__ = True
     geometry = Column(Geography())
 
-    def get_intersecting_objects(self, sess, target_cls):
+    def get_intersecting_objects(self, target_cls):
+        sess = inspect(self).session
         return sess.query(target_cls).filter(
             target_cls.geometry.ST_Intersects(self.geometry)
         )
