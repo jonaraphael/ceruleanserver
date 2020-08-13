@@ -10,7 +10,7 @@ def process_sns(raw):
     Arguments:  
         raw {dict} -- contains all the metadata and details of a new satellite image on S3
     """
-    with session_scope() as sess:
+    with session_scope(commit=True) as sess:
         
         sns = Sns_Ext(raw) ### Move this to the Lambda Function
         sess.add(sns)

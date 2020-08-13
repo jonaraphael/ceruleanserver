@@ -129,21 +129,3 @@ def shape_to_ewkt(shapely_shape, srid="4326"):
     """
     return f"SRID={srid};{wkt.dumps(shapely_shape, rounding_precision=server_config.WKT_ROUNDING)}"
 
-
-def wk_to_shapely(element):
-    """
-    https://geoalchemy-2.readthedocs.io/en/0.2.6/_modules/geoalchemy2/shape.html
-    Function to convert a :class:`geoalchemy2.types.SpatialElement`
-    to a Shapely geometry.
-
-    Example::
-
-        lake = Session.query(Lake).get(1)
-        polygon = to_shape(lake.geom)
-    """
-    if isinstance(element, WKBElement):
-        return wkb.loads(bytes(element.data))
-    elif isinstance(element, WKTElement):
-        return wkt.loads(element.data)
-    elif isinstance(element, str):
-        return wkt.loads(element.split(";")[-1])

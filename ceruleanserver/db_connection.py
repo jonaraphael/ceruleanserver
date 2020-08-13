@@ -20,21 +20,24 @@ class DBConnection:
         database=server_config.DB_DATABASE,
         port=server_config.DB_PORT,
         dbtype=server_config.DB_TYPE,
+        echo=server_config.ECHO_SQL,
     ):
         self.engine = create_engine(
-            f"{dbtype}://{user}:{password}@{host}:{port}/{database}",
-            echo=server_config.ECHO_SQL,
+            f"{dbtype}://{user}:{password}@{host}:{port}/{database}", echo=echo,
         )
         self.sess = sessionmaker(bind=self.engine)()
 
 
 @contextmanager
-def session_scope():
+def session_scope(commit, **kwargs):
     """Provide a transactional scope around a series of operations."""
-    db = DBConnection()
+    db = DBConnection(**kwargs)
     try:
         yield db.sess
-        db.sess.commit()
+        if commit:
+            db.sess.commit()
+        else:
+            db.sess.rollback()
     except:
         db.sess.rollback()
         raise

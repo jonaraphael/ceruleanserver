@@ -1,7 +1,7 @@
 """ 
 S3 utility functions. 
 """
-from subprocess import run
+from subprocess import run, Popen
 import boto3
 from pathlib import Path
 import os
@@ -97,3 +97,20 @@ def download_prefix(
                 if server_config.VERBOSE:
                     print(f"downloading {fpath}")
                 bucket.download_file(object.key, str(fpath))
+
+
+def sync_grds_and_vecs(pids, separate_process=False):
+    cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --exclude "*" '
+
+    include_tiffs = " ".join([f'--include "rasters/{pid}.tiff" ' for pid in pids])
+    cmd = cmd + include_tiffs
+
+    include_geos = " ".join([f'--include "vectors/{pid}.geojson" ' for pid in pids])
+    cmd = cmd + include_geos
+
+    if separate_process:
+        Popen(cmd, shell=True)
+    else:
+        run(cmd, shell=True)
+
+

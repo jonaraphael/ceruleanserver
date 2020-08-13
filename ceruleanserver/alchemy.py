@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography
 from configs import server_config
 
 Base = declarative_base()
@@ -58,7 +58,7 @@ class SmartBase(Base):
 
 class SmartGeo(SmartBase):
     __abstract__ = True
-    geometry = Column(Geometry())
+    geometry = Column(Geography())
 
     def get_intersecting_objects(self, sess, target_cls):
         return sess.query(target_cls).filter(
@@ -182,6 +182,7 @@ class Posi_Poly(SmartGeo):
     id = Column(Integer, Sequence(f"{__tablename__}_id_seq"), primary_key=True)
     inference__id = Column(Integer, ForeignKey("inference.id"))
     slick__id = Column(Integer, ForeignKey("slick.id"))
+    class_int = Column(Integer)
 
     inference = relationship(
         "Inference",
@@ -260,6 +261,7 @@ class Coincident(SmartGeo):
 class Slick(SmartBase):
     __tablename__ = "slick"
     id = Column(Integer, Sequence(f"{__tablename__}_id_seq"), primary_key=True)
+    class_int = Column(Integer)
 
     posi_polys = relationship(
         "Posi_Poly",

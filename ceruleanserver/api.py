@@ -33,8 +33,9 @@ MockRequest = {
 }
 
 print(MockRequest)
+db = "cerulean_test"
 
-with session_scope() as sess:
+with session_scope(commit=False, database=db) as sess:
     q = sess.query(Slick_Ext)
 
     # Order by time:
