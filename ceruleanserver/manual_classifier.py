@@ -3,11 +3,9 @@ from db_connection import session_scope
 from utils.s3 import sync_grds_and_vecs
 from data_objects import Slick_Ext, Grd_Ext, Inference_Ext, Posi_Poly_Ext
 from sqlalchemy import func, desc, cast
-from shapely.geometry import MultiPolygon
 from pathlib import Path
 from configs import path_config
 import geopandas
-import pandas as pd
 import rasterio
 import matplotlib.pyplot as plt
 import rasterio.plot
