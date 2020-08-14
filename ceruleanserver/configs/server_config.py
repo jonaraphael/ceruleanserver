@@ -5,9 +5,6 @@ The local configs are for dev debugging/testing.
 import importlib
 
 # Flask app settings
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-FLASK_DEBUG = False
 VERBOSE = False
 CLEANUP_SNS = True
 DOWNLOAD_GRDS = True

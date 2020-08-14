@@ -1,5 +1,3 @@
-import psycopg2
-import pandas as pd
 from configs import server_config
 import json
 

@@ -1,10 +1,9 @@
 from pathlib import Path
 import sys
 import shapely.geometry as sh
-from shapely import wkt, wkb
+from shapely import wkt
 from shapely.ops import unary_union
 import json
-from geoalchemy2.elements import WKBElement, WKTElement
 
 sys.path.append(str(Path(__file__).parent.parent))
 from configs import server_config
