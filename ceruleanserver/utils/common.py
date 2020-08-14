@@ -46,26 +46,28 @@ def xml_get(lst, a, key1="@name", key2="#text"):
     return None
 
 
-def load_ocean_shape(geom_name=server_config.OCEAN_GEOJSON):
-    """Read the ocean GeoJSON into memory once, so that it is accessible for all future functions
+def load_shape(geom_name, as_multipolygon=False):
+    """Read a GeoJSON into memory once, so that it is accessible for all future functions
 
     Returns:
         [Geometry] -- A Shapely geometry produced from a GeoJSON
     """
     geom_path = Path(path_config.LOCAL_DIR) / "aux_files" / geom_name
     if server_config.VERBOSE:
-        print("Loading Ocean GeoJSON")
+        print("Loading GeoJSON:", geom_name)
+    print()
     if not geom_path.exists():  # pylint: disable=no-member
-        src_path = "s3://skytruth-cerulean/aux_files/" + str(geom_name)
+        src_path = "s3://skytruth-cerulean/aux_files/" + geom_name
         download_str = f"aws s3 cp {src_path} {geom_path}"
         # print(download_str)
         run(download_str, shell=True)
 
-    with open(path_config.LOCAL_DIR + "aux_files/OceanGeoJSON_lowres.geojson") as f:
-        ocean_features = json.load(f)["features"]
-    geom = sh.GeometryCollection(
-        [sh.shape(feature["geometry"]).buffer(0) for feature in ocean_features]
-    )[0]
+    with open(geom_path, encoding='utf-8') as f:
+        geom = json.load(f)["features"]
+    if as_multipolygon:
+        geom = sh.GeometryCollection(
+            [sh.shape(feature["geometry"]).buffer(0) for feature in geom]
+        )[0]
     return geom
 
 def load_shape(geom_name, as_multipolygon=False):

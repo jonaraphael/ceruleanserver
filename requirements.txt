@@ -1,9 +1,15 @@
 xmltodict
 shapely
-psycopg2
 requests
-pandas
+fastai2=0.0.17
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+# brew install gdal
 gdal
+
+
+
+flask
+pandas
 pytest
 boto3
 sqlalchemy

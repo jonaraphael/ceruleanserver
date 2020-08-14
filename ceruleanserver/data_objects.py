@@ -24,8 +24,9 @@ from alchemy import (
     Eez,
 )
 from ml.raster_processing import resize
-from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt, wk_to_shapely
+from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt
 import shapely.geometry as sh
+from geoalchemy2.shape import to_shape
 
 
 class Sns_Ext(Sns):
@@ -248,7 +249,7 @@ class Slick_Ext(Slick):
 
     def calc_geometry(self):
         return sh.MultiPolygon(
-            [wk_to_shapely(poly.geometry) for poly in self.posi_polys]
+            [to_shape(poly.geometry) for poly in self.posi_polys]
         )
 
     def calc_eezs(self, sess):

@@ -5,9 +5,6 @@ The local configs are for dev debugging/testing.
 import importlib
 
 # Flask app settings
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-FLASK_DEBUG = False
 VERBOSE = False
 CLEANUP_SNS = True
 DOWNLOAD_GRDS = True
@@ -16,6 +13,8 @@ UPDATE_ML = True
 COUNTRIES_GEOJSON = "Countries.geojson"
 EEZ_GEOJSON = "eez_v11_simplified_noholes.geojson"
 OCEAN_GEOJSON = "OceanGeoJSON_lowres.geojson"
+COUNTRIES_GEOJSON = "Countries.geojson"
+EEZ_GEOJSON = "eez_v11_simplified_noholes.geojson"
 BLOCK_REPEAT_SNS = True
 SQS_URL = "https://sqs.eu-central-1.amazonaws.com/162277344632/New_Machinable"
 UPLOAD_OUTPUTS = True

@@ -1,13 +1,12 @@
 #%%
-from subprocess import run, PIPE
+from utils.s3 import sync_grds_and_vecs
+
+
 pids = [
-    
-] # up to 200 from Tues 2020-06-09 14:00
+    "S1B_IW_GRDH_1SDV_20200725T161522_20200725T161547_022630_02AF31_1521",
+    ]
 
-include_str = " ".join([f'--include "rasters/{pid}.tiff" --include "vectors/{pid}.geojson"' for pid in pids])
-cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ ../local/temp/outputs/ --exclude "*" {include_str}'
-run(cmd, shell=True)
-
+sync_grds_and_vecs(pids)
 # %%
 
 # Download all files

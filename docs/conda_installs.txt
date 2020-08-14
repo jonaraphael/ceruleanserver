@@ -23,7 +23,6 @@ conda install python=3.7.5 -y
 conda install pytorch==1.5.0 torchvision==0.6.0 cpuonly -c pytorch -y
 conda install --freeze-installed xmltodict -y
 conda install -c conda-forge shapely -y
-conda install -c anaconda --freeze-installed psycopg2 -y
 conda install -c anaconda --freeze-installed requests -y
 conda install -c conda-forge --freeze-installed gdal -y
 conda install -c anaconda --freeze-installed sqlalchemy -y
