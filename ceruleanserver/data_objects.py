@@ -27,6 +27,7 @@ from ml.raster_processing import resize
 from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt
 import shapely.geometry as sh
 from geoalchemy2.shape import to_shape
+from geoalchemy2.elements import WKTElement
 
 
 class Sns_Ext(Sns):
@@ -248,9 +249,8 @@ class Slick_Ext(Slick):
         return self.posi_polys[0].inference.grd.starttime
 
     def calc_geometry(self):
-        return sh.MultiPolygon(
-            [to_shape(poly.geometry) for poly in self.posi_polys]
-        )
+        shp_polys = [to_shape(WKTElement(poly.geometry, extended=True)) for poly in self.posi_polys]
+        return sh.MultiPolygon(shp_polys)
 
     def calc_eezs(self, sess):
         eez_ids = []
