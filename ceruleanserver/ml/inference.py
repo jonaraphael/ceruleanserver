@@ -70,7 +70,7 @@ def multi_machine(infero, out_path=None):
     union = unify(geojson_paths) # Returnds shapely multipolygon
     sparse = sparsify(union, geojson_paths)
     inter = intersection(geojson_paths[infero.fine_pkl_idx], sparse)
-    infero.polys = [poly for poly in inter]
+    infero.polys = [poly for poly in inter if poly.type is not 'Point']
     shapely_to_geojson(inter, out_path)
     return out_path
 
