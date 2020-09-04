@@ -22,6 +22,7 @@ import matplotlib.patches as patches
 
 db = "cerulean"
 set_by_area = False
+current_class = 1
 
 processed_pids = []
 outpath = Path(path_config.LOCAL_DIR) / "temp" / "outputs"
@@ -43,7 +44,7 @@ def get_unclassified_polys(sess, by_area=False):
         .join(Inference_Ext)
         .join(Posi_Poly_Ext)
         .join(Slick_Ext)
-        .filter(Slick_Ext.class_int == None)
+        .filter(Slick_Ext.class_int == current_class)
     )
     if by_area:
         q = q.order_by(desc(func.ST_Area(Posi_Poly_Ext.geometry)))
@@ -164,11 +165,11 @@ with session_scope(commit=True, database=db, echo=False) as sess:
             slick.class_int = class_int_dict[category.lower()]
             processed_pids += [[grd.id, grd.pid]]
 
-shutil.rmtree(raster_path.parent)
-shutil.rmtree(outpath / "vectors")
-
 with open(f"{path_config.LOCAL_DIR}temp/outputs/manually_classified.csv", "a") as f:
     writer = csv.writer(f)
     for proc in processed_pids:
         writer.writerow(proc + [date.today()])
+
+shutil.rmtree(raster_path.parent)
+shutil.rmtree(outpath / "vectors")
 # %%

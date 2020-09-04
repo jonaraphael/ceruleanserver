@@ -31,8 +31,12 @@ class SmartBase(Base):
         Returns:
             Alchemy Instance: An instance of the class specified
         """
-        self.load(sess, filter_attrs=filter_attrs)
-        sess.add(self)
+        loaded = self.load(sess, filter_attrs=filter_attrs)
+        if loaded:
+            return loaded
+        else:
+            sess.add(self)
+            return self
 
     def load(self, sess, filter_attrs=[]):
         """ Gets an object from a table in the db
@@ -41,9 +45,12 @@ class SmartBase(Base):
         q = sess.query(self.__class__).filter_by(**filters)
         instance = q.one_or_none()
         if instance:
-            self.__dict__.update(instance.__dict__)
-            self.loaded_from_db = True
-            sess.expire(instance)
+            for key, value in self.__dict__.iteritems():
+                setattr(instance, key, value)
+            instance.loaded_from_db = True
+            return instance
+        else:
+            return None
 
     def __repr__(self):
         return f"<{self.__tablename__} {self.id}: {self.loaded_from_db}>"
