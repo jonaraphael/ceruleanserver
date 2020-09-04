@@ -18,7 +18,12 @@ while True:
 
     if response.get("Messages"):
         for msg in response["Messages"]:
-            process_sns(json.loads(msg["Body"])["Records"][0]["Sns"])
+            try:
+                process_sns(json.loads(msg["Body"])["Records"][0]["Sns"])
+            except:
+                client.send_message(
+                    QueueUrl=server_config.SQS_DEADLETTER_URL, MessageBody=msg["Body"],
+                )
             client.delete_message(
                 QueueUrl=server_config.SQS_URL, ReceiptHandle=msg["ReceiptHandle"]
             )
