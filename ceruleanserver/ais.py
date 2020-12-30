@@ -415,3 +415,111 @@ for fname in fnames:
 #     db.sess.add(e)
 # db.sess.commit()
 # db.sess.close()
+#%%
+
+## Buffer AIS linestrings to identify culprit
+
+# sys.path.append(str(Path(__file__).parent.parent))
+# from configs import ais_config, server_config
+
+
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import json
+from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon
+from ml.vector_processing import geojson_to_shapely_multi
+
+coinc_path = Path(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/Coincidence/test/")
+for fpath in coinc_path.glob('*.csv'):
+    fstem = fpath.stem
+    print(fstem)
+
+    # Open the slick multipolygon
+    polypath = coinc_path.parent/"vectors"/(fstem+".geojson")
+    with open(polypath) as f:
+        geom = json.load(f)
+    slick_shape = shape(geom).buffer(0)
+    slick_gs = gpd.GeoSeries(slick_shape)
+
+    # Open the AIS data for the same GRD
+    ais_df = pd.read_csv(fpath).sort_values('timestamp')
+
+    # Find any solitary AIS broadcasts and duplicate them, because linestrings can't exist with just one point
+    singletons = ~ais_df.duplicated(subset='ssvid', keep=False)
+    duped_df = ais_df.loc[np.repeat(ais_df.index.values,singletons+1)]
+
+    # Zip the coordinates into a point object and convert to a GeoData Frame
+    geometry = [Point(xy) for xy in zip(duped_df.lon, duped_df.lat)]
+    geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
+
+    # Create a new GDF that uses the SSVID to create linestrings
+    ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
+    ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
+
+    # Initialize some search parameters
+    ssvid_df['coinc_score'] = 0
+    buffer_incr = 0.1
+    buffered_series = ssvid_df['geometry']
+    ssvid_df['max_buffered'] = None
+
+    print("Beginning First Buffer")
+    while True:
+
+        # Buffer the AIS tracks
+        buffered_series = buffered_series.buffer(buffer_incr)
+        # Calculate Slick Intersection as % (between 0 and 1)
+        coverage_percent = buffered_series.intersection(slick_gs[0]).area/slick_gs[0].area
+        # Create the integrand (between 0 and buffer_incr)
+        incr_score = (1 - coverage_percent) * buffer_incr
+        ssvid_df['coinc_score'].update(ssvid_df['coinc_score'] + incr_score)
+
+        # Treat AIS buffers that completely cover the slick
+        completed = buffered_series[coverage_percent==1]
+        ssvid_df['max_buffered'].update(completed)
+        buffered_series.drop(completed.index, inplace=True)
+
+        print(len(coverage_percent), max(coverage_percent))
+
+        if min(coverage_percent) == 1:
+            # Plot the max_buffered geometry, the slick, and the AIS tracks
+            sorted_score = gpd.GeoDataFrame(ssvid_df.sort_values('coinc_score', ascending=False), geometry="max_buffered")
+            ax = sorted_score.plot(cmap = "YlOrRd", alpha=0.3, figsize=(10,10))
+            slick_gs.plot(ax=ax, color='black')
+            ssvid_df.sort_values('coinc_score', ascending=False).plot(ax=ax, cmap = "Blues")
+
+            # Print the final score (closest to 0 is best)
+            print(sorted_score['coinc_score'])
+            break
+
+
+
+#%%
+#%%
+from datetime import datetime, timedelta
+in_format = "%Y-%m-%d %H:%M:%S+00"
+d_format = "%Y-%m-%d"
+t_format = "%Y-%m-%d %H:%M:%S"
+
+targets = [
+    ["S1A_IW_GRDH_1SDV_20201008T140722_20201008T140751_034706_040AEE_1057","MULTIPOLYGON(((59.0096 20.17485,61.43881 20.60817,61.10469 22.35841,58.64589 21.92908,59.0096 20.17485)))","2020-10-08 14:07:22+00"]
+]
+
+back_window = 12 # hours (3 hours for freshest)
+forward_window = 1.5 # hour
+
+for t in targets:
+
+    t_stamp = datetime.strptime(t[2], in_format)
+    mod_str = f"""
+  DATE(seg.date) >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), d_format)}'
+  AND DATE(seg.date) <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), d_format)}'
+  AND seg.timestamp >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), t_format)}'
+  AND seg.timestamp <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), t_format)}'
+  AND ST_COVEREDBY(ST_GEOGPOINT(seg.lon, seg.lat), ST_GeogFromText('{t[1]}'))
+    """
+
+    print(mod_str)
+    print(t[0])
+# %%

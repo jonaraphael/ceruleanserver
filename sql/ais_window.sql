@@ -8,5 +8,9 @@ FROM
 	JOIN grd d ON d.id = c.grd__id
 	JOIN slick e ON e.id = a.slick__id
  WHERE
- 	e.class_int = 1
+--  	e.class_int = 1
+	d.pid in (
+		'S1B_IW_GRDH_1SDV_20201114T013822_20201114T013850_024254_02E1E1_4638'
+		)
+	
 
