@@ -1,14 +1,14 @@
 #%%
-from utils.s3 import sync_grds_and_vecs
-
-
 pids = [
-    "S1B_IW_GRDH_1SDV_20200725T161522_20200725T161547_022630_02AF31_1521",
-    ]
+    "S1B_IW_GRDH_1SDV_20210203T183427_20210203T183452_025446_0307F5_7A5E"
+]
 
-sync_grds_and_vecs(pids)
 # %%
+from utils.s3 import sync_grds_and_vecs
+sync_grds_and_vecs(pids)
 
-# Download all files
-# cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ ../local/temp/outputs/'
-# run(cmd, shell=True)
+# %%
+from ais_funcs import sync_ais_csvs, mae_ranking
+sync_ais_csvs(pids)
+mae_ranking(pids, 5)
+# %%

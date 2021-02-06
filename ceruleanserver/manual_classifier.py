@@ -4,10 +4,10 @@
 db = "cerulean"
 current_class = None
 start_date = "2020-01-01"
-end_date = "2021-01-01"
-# Default: order by polsby-popper
+end_date = "2022-01-01"
+# Default: Order by polsby-popper
 set_by_area = False # Order by absolute area instead
-set_by_linear = False # Order by polsby-popper multiplied by rectangular fill-factor
+set_by_linear = True # Order by polsby-popper multiplied by rectangular fill-factor
 
 from db_connection import session_scope
 from utils.s3 import sync_grds_and_vecs

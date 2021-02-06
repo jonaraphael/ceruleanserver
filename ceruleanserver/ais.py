@@ -431,20 +431,20 @@ import json
 from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon
 from ml.vector_processing import geojson_to_shapely_multi
 
-coinc_path = Path(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/Coincidence/test/")
-for fpath in coinc_path.glob('*.csv'):
+coinc_path = Path(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/vectors/")
+for fpath in coinc_path.glob('*.geojson'):
     fstem = fpath.stem
     print(fstem)
 
     # Open the slick multipolygon
-    polypath = coinc_path.parent/"vectors"/(fstem+".geojson")
+    polypath = coinc_path.parent/"vectors"/fpath
     with open(polypath) as f:
         geom = json.load(f)
     slick_shape = shape(geom).buffer(0)
     slick_gs = gpd.GeoSeries(slick_shape)
 
     # Open the AIS data for the same GRD
-    ais_df = pd.read_csv(fpath).sort_values('timestamp')
+    ais_df = pd.read_csv(fstem+".csv").sort_values('timestamp')
 
     # Find any solitary AIS broadcasts and duplicate them, because linestrings can't exist with just one point
     singletons = ~ais_df.duplicated(subset='ssvid', keep=False)
@@ -496,30 +496,76 @@ for fpath in coinc_path.glob('*.csv'):
 
 
 #%%
-#%%
 from datetime import datetime, timedelta
-in_format = "%Y-%m-%d %H:%M:%S+00"
+import pandas_gbq
+from pathlib import Path
+from configs import path_config
+
+# Load from config
+project_id = "world-fishing-827"
+in_format = "%Y%m%dT%H%M%S"
 d_format = "%Y-%m-%d"
 t_format = "%Y-%m-%d %H:%M:%S"
 
-targets = [
-    ["S1A_IW_GRDH_1SDV_20201008T140722_20201008T140751_034706_040AEE_1057","MULTIPOLYGON(((59.0096 20.17485,61.43881 20.60817,61.10469 22.35841,58.64589 21.92908,59.0096 20.17485)))","2020-10-08 14:07:22+00"]
-]
 
-back_window = 12 # hours (3 hours for freshest)
-forward_window = 1.5 # hour
+def download_ais(pid, poly, back_window=12, forward_window=1.5):
+    time_from_pid = pid.split('_')[4]
+    t_stamp = datetime.strptime(time_from_pid, in_format)
 
-for t in targets:
+    sql = f"""
+        SELECT * FROM(
+        SELECT 
+        seg.ssvid as ssvid, 
+        seg.timestamp as timestamp, 
+        seg.lon as lon, 
+        seg.lat as lat,
+        ves.ais_identity.shipname_mostcommon.value as shipname,
+        ves.ais_identity.shiptype[SAFE_OFFSET(0)].value as shiptype,
+        ves.best.best_flag as flag,
+        ves.best.best_vessel_class as best_shiptype
+        FROM 
+        `world-fishing-827.gfw_research.pipe_v20201001` as seg
+        JOIN 
+        `world-fishing-827.gfw_research.vi_ssvid_v20201209` as ves
+        ON seg.ssvid = ves.ssvid
+        
+        WHERE
+        seg._PARTITIONTIME >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), d_format)}'
+        AND seg._PARTITIONTIME <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), d_format)}'
+        AND seg.timestamp >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), t_format)}'
+        AND seg.timestamp <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), t_format)}'
+        AND ST_COVEREDBY(ST_GEOGPOINT(seg.lon, seg.lat), ST_GeogFromText('{poly}'))
 
-    t_stamp = datetime.strptime(t[2], in_format)
-    mod_str = f"""
-  DATE(seg.date) >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), d_format)}'
-  AND DATE(seg.date) <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), d_format)}'
-  AND seg.timestamp >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), t_format)}'
-  AND seg.timestamp <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), t_format)}'
-  AND ST_COVEREDBY(ST_GEOGPOINT(seg.lon, seg.lat), ST_GeogFromText('{t[1]}'))
+        ORDER BY
+        seg.timestamp DESC
+        )
+        ORDER BY 
+        ssvid, timestamp
     """
+    return pandas_gbq.read_gbq(sql, project_id=project_id)
 
-    print(mod_str)
-    print(t[0])
+def rectangle_from_pid(pid, buff=.3):
+    geojson_path = fdir/"vectors"/(pid+".geojson")
+    with open(str(geojson_path)) as f:
+        g = shape(geojson.load(f))
+    return g.minimum_rotated_rectangle.buffer(buff).minimum_rotated_rectangle
+
+
+import json
+import geojson
+from shapely.geometry import shape
+
+fdir = Path(path_config.LOCAL_DIR)/"temp/outputs/"
+fdir.mkdir(parents=True, exist_ok=True)
+
+targets = [
+    "S1B_IW_GRDH_1SDV_20200909T034850_20200909T034915_023293_02C3CD_F327",
+]
+for pid in targets:
+    ais_path = fdir/"ais"/(pid+".csv")
+    if not ais_path.exists():
+        rect = rectangle_from_pid(pid)
+        df = download_ais(pid, str(rect))
+        df.to_csv(ais_path)
+
 # %%
