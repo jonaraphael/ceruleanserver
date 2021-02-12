@@ -4,10 +4,10 @@ import pandas_gbq
 from pathlib import Path
 from configs import path_config
 import json
-from shapely.geometry import shape, MultiPoint
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon
+from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon, MultiPoint
+from shapely.ops import split
 from ml.vector_processing import geojson_to_shapely_multi
 import numpy as np
 
@@ -88,7 +88,18 @@ def sample_shape(polygon, size, overestimate=2):
         samples = np.concatenate([samples, random_points_in_polygon(polygon, size, overestimate=overestimate)])
     return samples[np.random.choice(len(samples), size)]
 
-def mae_ranking(pids, return_count=None, num_samples=100):
+def find_xy(p1, p2, z):
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+    if z2 < z1:
+        return find_xy(p2, p1, z)
+
+    x = np.interp(z, (z1, z2), (x1, x2))
+    y = np.interp(z, (z1, z2), (y1, y2))
+
+    return x, y
+
+def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
     ## Buffer AIS linestrings to identify culprit
     for pid in pids:
         vect_path = vect_dir/(pid+".geojson")
@@ -109,20 +120,38 @@ def mae_ranking(pids, return_count=None, num_samples=100):
             # Open the AIS data for the same GRD
             ais_df = pd.read_csv(ais_path).sort_values('timestamp')
 
+            # Add DeltaTime column
+            capture_timestamp = datetime.strptime(pid.split("_")[4], in_format)
+            ais_df["delta_time"] = pd.to_datetime(ais_df["timestamp"], infer_datetime_format=True)-capture_timestamp
+            ais_df["Z"] = ais_df["delta_time"].dt.total_seconds() / 3600 * vel / 111 # sec * hr/sec * km/hr * deg/km = deg
+
             # Find any solitary AIS broadcasts and duplicate them, because linestrings can't exist with just one point
             singletons = ~ais_df.duplicated(subset='ssvid', keep=False)
             duped_df = ais_df.loc[np.repeat(ais_df.index.values,singletons+1)]
 
             # Zip the coordinates into a point object and convert to a GeoData Frame
-            geometry = [Point(xy) for xy in zip(duped_df.lon, duped_df.lat)]
+            geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
             geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
 
             # Create a new GDF that uses the SSVID to create linestrings
             ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
             ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
 
+            # Clip AIS tracks to data before image capture
+            ssvid_df["ais_before_t0"] = ssvid_df["geometry"]
+            for idx, vessel in ssvid_df["geometry"].iteritems():
+                for p0, p1 in zip(vessel.coords[:], vessel.coords[1:]):
+                    if p0[2] > 0: # No data points from before capture
+                        ssvid_df["ais_before_t0"][idx] = None
+                        break
+                    if p1[2] > 0: # Found the two datapoints that sandwich the capture Z=0
+                        x, y = find_xy(p0, p1, 0) # Find the XY where Z=0
+                        segments = split(vessel, Point(x,y,0).buffer(0.00001)) # Break apart the linestring at Z=0
+                        ssvid_df["ais_before_t0"][idx] = segments[0] # Keep only negative segment
+                        break
+
             # Calculate the Mean Absolute Error for each AIS Track
-            ssvid_df['coinc_score'] = [slick_samples_gs.distance(vessel).mean() for vessel in ssvid_df["geometry"]] # Mean Absolute Error
+            ssvid_df['coinc_score'] = [slick_samples_gs.distance(vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
             if return_count:
                 print(ssvid_df.sort_values('coinc_score', ascending=False)['coinc_score'].tail(return_count))
             else:
