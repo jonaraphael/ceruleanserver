@@ -115,7 +115,7 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
                 geom = json.load(f)
             slick_shape = shape(geom).buffer(0)
             sample_points = sample_shape(slick_shape, num_samples)
-            slick_samples_gs = gpd.GeoSeries([Point(s) for s in sample_points])
+            slick_samples_gs = gpd.GeoSeries([Point(*s, 0) for s in sample_points])
 
             # Open the AIS data for the same GRD
             ais_df = pd.read_csv(ais_path).sort_values('timestamp')
@@ -132,6 +132,25 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             # Zip the coordinates into a point object and convert to a GeoData Frame
             geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
             geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
+
+            # # Create alternate basis projections
+            # ais_alt_three = geo_df.copy()
+            # ais_alt_three["xy"] = LineString([Point(x, y) for x, y in zip(duped_df.lon, duped_df.lat)])
+            # ais_alt_three["xz"] = LineString([Point(x, z) for x, z in zip(duped_df.lon, duped_df.Z)])
+            # ais_alt_three["yz"] = LineString([Point(y, z) for y, z in zip(duped_df.lat, duped_df.Z)])
+
+            # samples_alt_three = gpd.GeoDataFrame(slick_samples_gs)
+            # samples_alt_three["xy"] = [Point(x, y) for x, y in sample_points]
+            # samples_alt_three["xz"] = [Point(x, 0) for x, y in sample_points]
+            # samples_alt_three["yz"] = [Point(y, 0) for x, y in sample_points]
+
+            # for dim in ["xy", "xz", "yz"]:
+            #     a = gpd.GeoDataFrame(samples_alt_three, geometry=dim)
+            #     b = gpd.GeoDataFrame(ais_alt_three, geometry=dim)
+            #     for i, ves in b["xy"].iteritems():
+            #         print(ves)
+            #         print(a.distance(ves))
+            #         # print(samples_alt_three["xy"].distance(ves))
 
             # Create a new GDF that uses the SSVID to create linestrings
             ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
@@ -153,9 +172,9 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             # Calculate the Mean Absolute Error for each AIS Track
             ssvid_df['coinc_score'] = [slick_samples_gs.distance(vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
             if return_count:
-                print(ssvid_df.sort_values('coinc_score', ascending=False)['coinc_score'].tail(return_count))
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'].tail(return_count))
             else:
-                print(ssvid_df.sort_values('coinc_score', ascending=False)['coinc_score'])
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'])
             print(pid)
 
 # %%
@@ -186,23 +205,23 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
 #     else: 
 #         return combine(one_step_deeper)
     
-# # pid = "S1A_IW_GRDH_1SDV_20200806T223947_20200806T224012_033792_03EAE3_9E54"
-# # geojson_path = vect_dir/(pid+".geojson")
-# # orig_gdf = gpd.GeoDataFrame.from_file(geojson_path).explode()
-# # # TODO: Set Index equal to the PosiPoly_ID
-# # orig_gdf["polsby_fill"] = [poly.length**2/poly.minimum_rotated_rectangle.area for poly in orig_gdf['geometry']]
-# # poly_rects = gpd.GeoDataFrame({'geometry':[poly.minimum_rotated_rectangle for poly in orig_gdf['geometry']]})
-# # bowties = gpd.GeoDataFrame({"geometry":[rect_to_bowtie(rect) for rect in poly_rects["geometry"]]})
+# pid = "S1B_IW_GRDH_1SDV_20210108T152831_20210108T152900_025065_02FBC1_5A3D"
+# geojson_path = vect_dir/(pid+".geojson")
+# orig_gdf = gpd.GeoDataFrame.from_file(geojson_path).explode()
+# # TODO: Set Index equal to the PosiPoly_ID
+# orig_gdf["polsby_fill"] = [poly.length**2/poly.minimum_rotated_rectangle.area for poly in orig_gdf['geometry']]
+# poly_rects = gpd.GeoDataFrame({'geometry':[poly.minimum_rotated_rectangle for poly in orig_gdf['geometry']]})
+# bowties = gpd.GeoDataFrame({"geometry":[rect_to_bowtie(rect) for rect in poly_rects["geometry"]]})
 
-# # overlaps = {i1:set([i2 for i2, p2 in bowties.itertuples() if p1.buffer(0).intersects(p2.buffer(0))]) for i1, p1 in bowties.itertuples()}
-# # slicks = combine(overlaps)
-# # slick_idxs = set([min(list(slicks[i])) for i in slicks])
+# overlaps = {i1:set([i2 for i2, p2 in bowties.itertuples() if p1.buffer(0).intersects(p2.buffer(0))]) for i1, p1 in bowties.itertuples()}
+# slicks = combine(overlaps)
+# slick_idxs = set([min(list(slicks[i])) for i in slicks])
 
-# # print(len(orig_gdf))
-# # for idx in slick_idxs:
-# #     print(idx)
-# #     orig_gdf.iloc[list(slicks[idx])].plot()
-# # bowties.plot()
-# # orig_gdf.plot()
+# print(len(orig_gdf))
+# for idx in slick_idxs:
+#     print(idx)
+#     orig_gdf.iloc[list(slicks[idx])].plot()
+# bowties.plot()
+# orig_gdf.plot()
 
-# #     # %%
+#     # %%
