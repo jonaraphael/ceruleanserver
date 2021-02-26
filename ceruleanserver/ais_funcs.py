@@ -58,6 +58,28 @@ def download_ais(pid, poly, back_window, forward_window):
     """
     return pandas_gbq.read_gbq(sql, project_id=project_id)
 
+def segment_splitter(curve):
+    return list(map(LineString, zip(curve.coords[:-1], curve.coords[1:])))
+
+def z_linestring_dist(z_point, z_line_string):
+    return np.min([z_lineseg_dist(z_point, seg) for seg in segment_splitter(z_line_string)])
+    # XXX This loop is SLOW how to get rid of it?
+
+def z_lineseg_dist(z_point, z_line_segment):
+    # from https://stackoverflow.com/questions/54442057/
+    # XXX Why does this not return sqrt(3)/2 when using Point(0,0,1) and LineString(((0,0,0), (1,1,1)))???
+    p = np.array(z_point.coords[0])
+    a = np.array(z_line_segment.coords[0])
+    b = np.array(z_line_segment.coords[1])
+    if np.all(a == b):
+        return np.linalg.norm(p - a)
+    d = np.divide(b - a, np.linalg.norm(b - a)) # normalized tangent vector
+    s = np.dot(a - p, d) # signed parallel distance components
+    t = np.dot(p - b, d) # signed parallel distance components
+    h = np.maximum.reduce([s, t, 0]) # clamped parallel distance
+    c = np.cross(p - a, d) # perpendicular distance component, as before
+    return np.hypot(h, np.linalg.norm(c)) # use hypot for Pythagoras to improve accuracy
+
 def rectangle_from_pid(pid, buff=.3):
     geojson_path = vect_dir/(pid+".geojson")
     with open(str(geojson_path)) as f:
@@ -99,8 +121,9 @@ def find_xy(p1, p2, z):
 
     return x, y
 
-def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
+def mae_ranking(pids, return_count=None, num_samples=50, vel=1):
     ## Buffer AIS linestrings to identify culprit
+    # vel is a ratio from time to distance, used as to add a Z dimension to the AIS points for coincidence scoring
     for pid in pids:
         vect_path = vect_dir/(pid+".geojson")
         ais_path = ais_dir/(pid+".csv")
@@ -133,25 +156,6 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
             geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
 
-            # # Create alternate basis projections
-            # ais_alt_three = geo_df.copy()
-            # ais_alt_three["xy"] = LineString([Point(x, y) for x, y in zip(duped_df.lon, duped_df.lat)])
-            # ais_alt_three["xz"] = LineString([Point(x, z) for x, z in zip(duped_df.lon, duped_df.Z)])
-            # ais_alt_three["yz"] = LineString([Point(y, z) for y, z in zip(duped_df.lat, duped_df.Z)])
-
-            # samples_alt_three = gpd.GeoDataFrame(slick_samples_gs)
-            # samples_alt_three["xy"] = [Point(x, y) for x, y in sample_points]
-            # samples_alt_three["xz"] = [Point(x, 0) for x, y in sample_points]
-            # samples_alt_three["yz"] = [Point(y, 0) for x, y in sample_points]
-
-            # for dim in ["xy", "xz", "yz"]:
-            #     a = gpd.GeoDataFrame(samples_alt_three, geometry=dim)
-            #     b = gpd.GeoDataFrame(ais_alt_three, geometry=dim)
-            #     for i, ves in b["xy"].iteritems():
-            #         print(ves)
-            #         print(a.distance(ves))
-            #         # print(samples_alt_three["xy"].distance(ves))
-
             # Create a new GDF that uses the SSVID to create linestrings
             ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
             ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
@@ -170,15 +174,32 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
                         break
 
             # Calculate the Mean Absolute Error for each AIS Track
-            ssvid_df['coinc_score'] = [slick_samples_gs.distance(vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+            # XXX Note that "if vessel else None" means that we are ignoring vessels that only broadcast AIS AFTER the image was captured (this is not ideal)
+            ssvid_df['coinc_score'] = [slick_samples_gs.apply(func=z_linestring_dist, z_line_string=vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+
+            # Suggest Abstention
+            abstain_threshold = 0.05 # This is a threshold value that determines how often we abstain from blaming a vessel in the picture (default = 0.01). Raise the value to make it more likely to blame a vessel.
+            ssvid_df = ssvid_df.append(pd.Series({'coinc_score':abstain_threshold},name="^^^ Abstain Above^^^"))
+
             if return_count:
-                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'].tail(return_count))
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")["coinc_score"].tail(return_count))
             else:
-                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'])
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")["coinc_score"])
             print(pid)
 
 # %%
+
+# # %%
 # % matplotlib inline
+# from pathlib import Path
+# from configs import path_config
+# import geopandas as gpd
+# import numpy as np
+# from shapely.geometry import Polygon#, Point, LineString, shape, MultiPolygon, MultiPoint
+
+# fdir = Path(path_config.LOCAL_DIR)/"temp/outputs/"
+# ais_dir = fdir/"ais"
+# vect_dir = fdir/"vectors"
 
 # def rect_to_bowtie(shapely_rectangle, stretch_factor=1, spread_factor=1):
 #     pp = [np.array(pnt) for pnt in shapely_rectangle.exterior.coords[:-1]]
@@ -224,4 +245,5 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
 # bowties.plot()
 # orig_gdf.plot()
 
-#     # %%
+
+# %%
