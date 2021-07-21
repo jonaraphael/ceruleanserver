@@ -22,10 +22,7 @@ ais_dir = fdir/"ais"
 vect_dir = fdir/"vectors"
 
 
-def download_ais(pid, poly, back_window, forward_window):
-    time_from_pid = pid.split('_')[4]
-    t_stamp = datetime.strptime(time_from_pid, in_format)
-
+def download_ais(t_stamp, poly, back_window, forward_window):
     sql = f"""
         SELECT * FROM(
         SELECT 
@@ -86,18 +83,45 @@ def rectangle_from_pid(pid, buff):
         g = shape(json.load(f))
     return g.minimum_rotated_rectangle.buffer(buff).minimum_rotated_rectangle
 
+def disc_from_point(longitude, latitude, buff):
+    g = shape(Point(longitude, latitude))
+    return g.buffer(buff)
+
+def sync_ais_from_point_time(longitude, latitude, tstamp, back_window=12, forward_window=1.5, buff=.5):
+    # tstamp must be a string in this format: "%Y%m%dT%H%M%S"
+    ais_dir.mkdir(parents=True, exist_ok=True)    
+    ais_path = ais_dir/(str(tstamp)+"_"+str(longitude)+"_"+str(latitude)+".geojson")
+    if not ais_path.exists():
+        disc = disc_from_point(longitude, latitude, buff)
+        t_stamp = datetime.strptime(tstamp, in_format)
+        df = download_ais(t_stamp, str(disc), back_window, forward_window)
+        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
+        if len(df)>0:
+            gdf.to_file(ais_path, driver="GeoJSON")
+        else:
+            print("No AIS data found for", ais_path.name)
+    else:
+        print("AIS already downloaded for", ais_path.name)    
+
 def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5):
     ais_dir.mkdir(parents=True, exist_ok=True)
     for pid in pids:
         ais_path = ais_dir/(pid+".geojson")
-        if not ais_path.exists():
+        geojson_path = vect_dir/(pid+".geojson")
+        if not geojson_path.exists():
+            print("No GeoJSON data found for", pid)
+        elif not ais_path.exists():
             rect = rectangle_from_pid(pid, buff)
-            df = download_ais(pid, str(rect), back_window, forward_window)
+            time_from_pid = pid.split('_')[4]
+            t_stamp = datetime.strptime(time_from_pid, in_format)
+            df = download_ais(t_stamp, str(rect), back_window, forward_window)
             gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
             if len(df)>0:
                 gdf.to_file(ais_path, driver="GeoJSON")
             else:
                 print("No AIS data found for", pid)
+        else:
+            print("AIS already downloaded for", pid)
 
 def sample_shape(polygon, size, overestimate=2):
     min_x, min_y, max_x, max_y = polygon.bounds

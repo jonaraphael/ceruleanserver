@@ -11,15 +11,15 @@ from data_objects import (
 from sqlalchemy import func, or_
 from db_connection import session_scope
 
-
-# All lists are OR'd together
+# All lists are ORed together
+# All key/values are ANDed together
 
 MockRequest = {
     # "aoi" : "SRID=4326; POLYGON ((149 -9, 148 -9, 148 -8, 149 -8, 149 -9))",
-    # "startdate" : "2020-06-01",
-    # "enddate" : "2020-07-01",
+    "startdate" : "2021-01-01",
+    "enddate" : "2021-02-01",
     # "eez_sov" : ["australia", "papua"],
-    # "limit" : 5,
+    "limit" : 5,
     # "offset" : 5,
     # "count" : True,
 
@@ -33,7 +33,7 @@ MockRequest = {
 }
 
 print(MockRequest)
-db = "cerulean_test"
+db = "cerulean"
 
 with session_scope(commit=False, database=db) as sess:
     q = sess.query(Slick_Ext)
@@ -98,7 +98,6 @@ with session_scope(commit=False, database=db) as sess:
     if MockRequest.get("count"):
         print(q.distinct().count())
     else:
-        # XXXHELP How should I get to a Slick_Ext object given a Slick object without duplication?
-        print([Slick_Ext(from_obj=s).to_api_dict(sess) for s in q.all()])
-        # print(q.all())
+        print([s.to_api_dict(sess) for s in q.all()])
 
+# %%

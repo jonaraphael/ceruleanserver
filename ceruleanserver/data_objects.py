@@ -23,14 +23,24 @@ from alchemy import (
     Slick,
     Eez,
 )
+from sqlalchemy.orm import relationship, reconstructor
 from ml.raster_processing import resize
 from ml.vector_processing import geojson_to_ewkt, shape_to_ewkt
 import shapely.geometry as sh
 from geoalchemy2.shape import to_shape
-from geoalchemy2.elements import WKTElement
+from geoalchemy2.elements import WKTElement, WKBElement
 
 
 class Sns_Ext(Sns):
+    # Database Relationships
+    grd = relationship(
+        "Grd_Ext",
+        back_populates="sns",
+        uselist=False,
+        enable_typechecks=False,  # XXXHELP How can I do this without disabling typechecks?
+        cascade_backrefs=False,
+    )
+
     def __init__(self, raw):
         # DB Columns
         self.messageid = raw["MessageId"]
@@ -43,6 +53,32 @@ class Sns_Ext(Sns):
 
 
 class Grd_Ext(Grd):
+    # Default values
+    file_path = None
+    s3_dir = None
+    
+    # Database Relationships
+    sns = relationship(
+        "Sns_Ext",
+        back_populates="grd",
+        foreign_keys=Grd.sns__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    ocn = relationship(
+        "Ocn_Ext",
+        back_populates="grd",
+        uselist=False,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    inferences = relationship(
+        "Inference_Ext",
+        back_populates="grd",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    
     def __init__(self, sns):
         # DB Columns
         self.sns = sns
@@ -58,16 +94,14 @@ class Grd_Ext(Grd):
         self.geometry = geojson_to_ewkt(sns.message["footprint"])
 
         # Calculated
-        self.sns_msg = sns.message
-        self.s3_dir = f"s3://sentinel-s1-l1c/{self.sns_msg['path']}/measurement/"
-        self.load_from_field = "pid"
-
-        # Placeholders
-        self.filepath = None
+        self.s3_dir = f"s3://sentinel-s1-l1c/{sns.message['path']}/measurement/"
 
     def download_grd_tiff(self, dest_dir=None):
         """Creates a local directory and downloads a GeoTiff (often ~700MB)
         """
+        if self.loaded_from_db: # This Grd was copied in from the DB, and does not have the a record of the s3 directory
+            raise Exception(f"Load Error: {self} was loaded from the DB and is missing a critical piece of information not stored there.")
+
         if server_config.VERBOSE:
             print("Downloading GRD")
 
@@ -76,7 +110,7 @@ class Grd_Ext(Grd):
             if dest_dir
             else Path(path_config.LOCAL_DIR) / "temp" / self.pid
         )
-        self.file_path = dest_dir / f"{self.sns_msg['mode'].lower()}-vv.tiff"
+        self.file_path = dest_dir / f"{self.mode.lower()}-vv.tiff"
         s3copy(self.file_path.name, self.s3_dir, dest_dir)
         self.is_downloaded = True
         return self.file_path
@@ -84,11 +118,31 @@ class Grd_Ext(Grd):
     def cleanup(self):
         """Delete any local directory made to store the GRD
         """
-        if self.file_path.parent.exists():
+        if self.file_path and self.file_path.parent.exists():
             shutil.rmtree(self.file_path.parent)
+        else:
+            print("WARNING: File path not found when attempting to delete.")
 
 
 class Ocn_Ext(Ocn):
+    # Default values
+    file_path = None
+
+    # Database Relationships
+    grd = relationship(
+        "Grd_Ext",
+        back_populates="ocn",
+        foreign_keys=Ocn.grd__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    inferences = relationship(
+        "Inference_Ext",
+        back_populates="ocn",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    
     def __init__(self, grd, ocn_xml):
         # DB Columns
         self.grd = grd
@@ -98,11 +152,34 @@ class Ocn_Ext(Ocn):
         self.producttype = xml_get(ocn_xml.get("str"), "producttype")
         self.filename = xml_get(ocn_xml.get("str"), "filename")
 
-        # Calculated
-        self.file_path = None
-
 
 class Inference_Ext(Inference):
+    # Default values
+    polys = []  # Shapely Objects
+    posi_polys = []  # SQLAlchemy objects
+
+    # Database Relationships
+    grd = relationship(
+        "Grd_Ext",
+        back_populates="inferences",
+        foreign_keys=Inference.grd__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    ocn = relationship(
+        "Ocn_Ext",
+        back_populates="inferences",
+        foreign_keys=Inference.ocn__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    posi_polys = relationship(
+        "Posi_Poly_Ext",
+        back_populates="inference",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+
     def __init__(
         self,
         grd,
@@ -127,16 +204,16 @@ class Inference_Ext(Inference):
         self.overhang = overhang
 
         # Calculated
-        self.polys = []  # Shapely Objects
-        self.posi_polys = []  # SQLAlchemy objects
         self.grd_path = grd.file_path
         self.prod_id = grd.pid
         self.geom_path = geom_path or self.grd_path.with_name(
             f"slick_{'-'.join([str(t) for t in self.thresholds])}conf.geojson"
         )
-        self.use_ocn = use_ocn
 
     def save_small_to_s3(self, pct=0.25):
+        if self.loaded_from_db: # This object was copied in from the DB, and does not have the a record of grd_path
+            raise Exception(f"Load Error: {self} was loaded from the DB and is missing a critical piece of information not stored there.")
+            
         small_path = self.grd_path.with_name("small.tiff")
         resize(self.grd_path, small_path, pct)
         s3_raster_path = f"s3://skytruth-cerulean/outputs/rasters/{self.prod_id}.tiff"
@@ -145,6 +222,8 @@ class Inference_Ext(Inference):
         clear(small_path)
 
     def save_poly_to_s3(self):
+        if self.loaded_from_db: # This object was copied in from the DB, and does not have the a record of prod_id
+            raise Exception(f"Load Error: {self} was loaded from the DB and is missing a critical piece of information not stored there.")
         s3_vector_path = (
             f"s3://skytruth-cerulean/outputs/vectors/{self.prod_id}.geojson"
         )
@@ -153,16 +232,33 @@ class Inference_Ext(Inference):
 
 
 class Posi_Poly_Ext(Posi_Poly):
-    def __init__(self, inf=None, geoshape=None, slick=None, from_obj=None):
-        if from_obj:
-            self.inference = from_obj.inference
-            self.slick = from_obj.slick
-            self.geometry = from_obj.geometry
-        else:
-            # DB Columns
-            self.inference = inf
-            self.slick = slick
-            self.geometry = shape_to_ewkt(geoshape)
+    # Database Relationships
+    inference = relationship(
+        "Inference_Ext",
+        back_populates="posi_polys",
+        foreign_keys=Posi_Poly.inference__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    slick = relationship(
+        "Slick_Ext",
+        back_populates="posi_polys",
+        foreign_keys=Posi_Poly.slick__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    coincidents = relationship(
+        "Coincident_Ext",
+        back_populates="posi_poly",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    
+    def __init__(self, inf=None, geoshape=None, slick=None):
+        # DB Columns
+        self.inference = inf
+        self.geometry = shape_to_ewkt(geoshape)
+        self.slick = slick
 
     def calc_eezs(self, sess):
         # XXX This set command isn't working.
@@ -171,6 +267,14 @@ class Posi_Poly_Ext(Posi_Poly):
 
 
 class Vessel_Ext(Vessel):
+    # Database Relationships
+    coincidents = relationship(
+        "Coincident_Ext",
+        back_populates="vessel",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+
     def __init__(self, inf, geoshape):
         # DB Columns
         self.inference = inf
@@ -178,6 +282,22 @@ class Vessel_Ext(Vessel):
 
 
 class Coincident_Ext(Coincident):
+    # Database Relationships
+    posi_poly = relationship(
+        "Posi_Poly_Ext",
+        back_populates="coincidents",
+        foreign_keys=Coincident.posi_poly__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    vessel = relationship(
+        "Vessel_Ext",
+        back_populates="coincidents",
+        foreign_keys=Coincident.vessel__id,
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+    
     def __init__(self, posi_poly, vessel, input="???"):
         # DB Columns
         self.posi_poly = posi_poly
@@ -217,23 +337,31 @@ class Coincident_Ext(Coincident):
 
 
 class Slick_Ext(Slick):
-    def __init__(self, posi_polys=[], from_obj=None):
-        if from_obj:
-            self.posi_polys = [
-                Posi_Poly_Ext(from_obj=posi_poly) for posi_poly in from_obj.posi_polys
-            ]
-        else:
-            # DB Columns
-            self.posi_polys = posi_polys
+    # Database Relationships
+    posi_polys = relationship(
+        "Posi_Poly_Ext",
+        back_populates="slick",
+        enable_typechecks=False,
+        cascade_backrefs=False,
+    )
+
+    def __init__(self, posi_polys=[]):
+        # DB Columns
+        self.posi_polys = posi_polys
 
         # Calculated
         self.timestamp = self.calc_timestamp()
         self.geometry = shape_to_ewkt(self.calc_geometry())
         self.coincidents = self.calc_coincidents()
+        
+    @reconstructor # This code will be run once when this object is loaded from the DB. It cannot accept parameters
+    def init_on_load(self):
+        self.loaded_from_db = True
+        self.timestamp = self.calc_timestamp()
+        self.geometry = shape_to_ewkt(self.calc_geometry())
+        self.coincidents = self.calc_coincidents()
 
-    def to_api_dict(
-        self, sess
-    ):  # XXXHELP Should the session just be a global variable?
+    def to_api_dict(self, sess):  # XXXHELP Should the session just be a global variable?
         res = {
             "id": self.id,
             "timestamp": to_standard_datetime_str(self.timestamp),
@@ -249,7 +377,10 @@ class Slick_Ext(Slick):
         return self.posi_polys[0].inference.grd.starttime
 
     def calc_geometry(self):
-        shp_polys = [to_shape(WKTElement(poly.geometry, extended=True)) for poly in self.posi_polys]
+        if isinstance(self.posi_polys[0].geometry, WKBElement):
+            shp_polys = [to_shape(poly.geometry) for poly in self.posi_polys]
+        else:
+            shp_polys = [to_shape(WKTElement(poly.geometry, extended=True)) for poly in self.posi_polys]
         return sh.MultiPolygon(shp_polys)
 
     def calc_eezs(self, sess):
@@ -280,7 +411,6 @@ class Eez_Ext(Eez):
 class SHO:
     """A class that organizes information about content stored on SciHub
     """
-
     def __init__(self, grd, sess, user=server_config.SH_USER, pwd=server_config.SH_PWD):
         self.prod_id = grd.pid
         self.generic_id = self.prod_id[:7] + "????_?" + self.prod_id[13:-4] + "*"
