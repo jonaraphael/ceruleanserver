@@ -22,10 +22,7 @@ ais_dir = fdir/"ais"
 vect_dir = fdir/"vectors"
 
 
-def download_ais(pid, poly, back_window, forward_window):
-    time_from_pid = pid.split('_')[4]
-    t_stamp = datetime.strptime(time_from_pid, in_format)
-
+def download_ais(t_stamp, poly, back_window, forward_window):
     sql = f"""
         SELECT * FROM(
         SELECT 
@@ -58,23 +55,73 @@ def download_ais(pid, poly, back_window, forward_window):
     """
     return pandas_gbq.read_gbq(sql, project_id=project_id)
 
-def rectangle_from_pid(pid, buff=.3):
+def segment_splitter(curve):
+    return list(map(LineString, zip(curve.coords[:-1], curve.coords[1:])))
+
+def z_linestring_dist(z_point, z_line_string):
+    return np.min([z_lineseg_dist(z_point, seg) for seg in segment_splitter(z_line_string)])
+    # XXX This loop is SLOW how to get rid of it?
+
+def z_lineseg_dist(z_point, z_line_segment):
+    # from https://stackoverflow.com/questions/54442057/
+    # XXX Why does this not return sqrt(3)/2 when using Point(0,0,1) and LineString(((0,0,0), (1,1,1)))???
+    p = np.array(z_point.coords[0])
+    a = np.array(z_line_segment.coords[0])
+    b = np.array(z_line_segment.coords[1])
+    if np.all(a == b):
+        return np.linalg.norm(p - a)
+    d = np.divide(b - a, np.linalg.norm(b - a)) # normalized tangent vector
+    s = np.dot(a - p, d) # signed parallel distance components
+    t = np.dot(p - b, d) # signed parallel distance components
+    h = np.maximum.reduce([s, t, 0]) # clamped parallel distance
+    c = np.cross(p - a, d) # perpendicular distance component, as before
+    return np.hypot(h, np.linalg.norm(c)) # use hypot for Pythagoras to improve accuracy
+
+def rectangle_from_pid(pid, buff):
     geojson_path = vect_dir/(pid+".geojson")
     with open(str(geojson_path)) as f:
         g = shape(json.load(f))
     return g.minimum_rotated_rectangle.buffer(buff).minimum_rotated_rectangle
 
-def sync_ais_csvs(pids, back_window=12, forward_window=1.5):
+def disc_from_point(longitude, latitude, buff):
+    g = shape(Point(longitude, latitude))
+    return g.buffer(buff)
+
+def sync_ais_from_point_time(longitude, latitude, tstamp, back_window=12, forward_window=1.5, buff=.5):
+    # tstamp must be a string in this format: "%Y%m%dT%H%M%S"
+    ais_dir.mkdir(parents=True, exist_ok=True)    
+    ais_path = ais_dir/(str(tstamp)+"_"+str(longitude)+"_"+str(latitude)+".geojson")
+    if not ais_path.exists():
+        disc = disc_from_point(longitude, latitude, buff)
+        t_stamp = datetime.strptime(tstamp, in_format)
+        df = download_ais(t_stamp, str(disc), back_window, forward_window)
+        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
+        if len(df)>0:
+            gdf.to_file(ais_path, driver="GeoJSON")
+        else:
+            print("No AIS data found for", ais_path.name)
+    else:
+        print("AIS already downloaded for", ais_path.name)    
+
+def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5):
     ais_dir.mkdir(parents=True, exist_ok=True)
     for pid in pids:
-        ais_path = ais_dir/(pid+".csv")
-        if not ais_path.exists():
-            rect = rectangle_from_pid(pid)
-            df = download_ais(pid, str(rect), back_window, forward_window)
+        ais_path = ais_dir/(pid+".geojson")
+        geojson_path = vect_dir/(pid+".geojson")
+        if not geojson_path.exists():
+            print("No GeoJSON data found for", pid)
+        elif not ais_path.exists():
+            rect = rectangle_from_pid(pid, buff)
+            time_from_pid = pid.split('_')[4]
+            t_stamp = datetime.strptime(time_from_pid, in_format)
+            df = download_ais(t_stamp, str(rect), back_window, forward_window)
+            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
             if len(df)>0:
-                df.to_csv(ais_path)
+                gdf.to_file(ais_path, driver="GeoJSON")
             else:
                 print("No AIS data found for", pid)
+        else:
+            print("AIS already downloaded for", pid)
 
 def sample_shape(polygon, size, overestimate=2):
     min_x, min_y, max_x, max_y = polygon.bounds
@@ -97,13 +144,31 @@ def find_xy(p1, p2, z):
     x = np.interp(z, (z1, z2), (x1, x2))
     y = np.interp(z, (z1, z2), (y1, y2))
 
-    return x, y
+    return Point(x, y, z)
 
-def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
+def cut(line, distance):
+    # Cuts a line in two at a distance from its starting point
+    if distance <= 0.0 or distance >= line.length:
+        return [LineString(line)]
+    coords = list(line.coords)
+    for i, p in enumerate(coords):
+        pd = line.project(Point(p))
+        if pd == distance:
+            return [
+                LineString(coords[:i+1]),
+                LineString(coords[i:])]
+        if pd > distance:
+            cp = line.interpolate(distance)
+            return [
+                LineString(coords[:i] + [(cp.x, cp.y, cp.z)]),
+                LineString([(cp.x, cp.y, cp.z)] + coords[i:])]
+
+def mae_ranking(pids, return_count=None, num_samples=50, vel=1):
     ## Buffer AIS linestrings to identify culprit
+    # vel is a ratio from time to distance, used as to add a Z dimension to the AIS points for coincidence scoring
     for pid in pids:
         vect_path = vect_dir/(pid+".geojson")
-        ais_path = ais_dir/(pid+".csv")
+        ais_path = ais_dir/(pid+".geojson")
 
         if not vect_path.exists():
             print("Could not find GeoJSON file for", pid)
@@ -118,7 +183,7 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             slick_samples_gs = gpd.GeoSeries([Point(*s, 0) for s in sample_points])
 
             # Open the AIS data for the same GRD
-            ais_df = pd.read_csv(ais_path).sort_values('timestamp')
+            ais_df = gpd.read_file(ais_path).sort_values('timestamp')
 
             # Add DeltaTime column
             capture_timestamp = datetime.strptime(pid.split("_")[4], in_format)
@@ -133,25 +198,6 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
             geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
 
-            # # Create alternate basis projections
-            # ais_alt_three = geo_df.copy()
-            # ais_alt_three["xy"] = LineString([Point(x, y) for x, y in zip(duped_df.lon, duped_df.lat)])
-            # ais_alt_three["xz"] = LineString([Point(x, z) for x, z in zip(duped_df.lon, duped_df.Z)])
-            # ais_alt_three["yz"] = LineString([Point(y, z) for y, z in zip(duped_df.lat, duped_df.Z)])
-
-            # samples_alt_three = gpd.GeoDataFrame(slick_samples_gs)
-            # samples_alt_three["xy"] = [Point(x, y) for x, y in sample_points]
-            # samples_alt_three["xz"] = [Point(x, 0) for x, y in sample_points]
-            # samples_alt_three["yz"] = [Point(y, 0) for x, y in sample_points]
-
-            # for dim in ["xy", "xz", "yz"]:
-            #     a = gpd.GeoDataFrame(samples_alt_three, geometry=dim)
-            #     b = gpd.GeoDataFrame(ais_alt_three, geometry=dim)
-            #     for i, ves in b["xy"].iteritems():
-            #         print(ves)
-            #         print(a.distance(ves))
-            #         # print(samples_alt_three["xy"].distance(ves))
-
             # Create a new GDF that uses the SSVID to create linestrings
             ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
             ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
@@ -161,24 +207,41 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
             for idx, vessel in ssvid_df["geometry"].iteritems():
                 for p0, p1 in zip(vessel.coords[:], vessel.coords[1:]):
                     if p0[2] > 0: # No data points from before capture
-                        ssvid_df["ais_before_t0"][idx] = None
+                        ssvid_df["ais_before_t0"].loc[idx] = None
                         break
                     if p1[2] > 0: # Found the two datapoints that sandwich the capture Z=0
-                        x, y = find_xy(p0, p1, 0) # Find the XY where Z=0
-                        segments = split(vessel, Point(x,y,0).buffer(0.00001)) # Break apart the linestring at Z=0
-                        ssvid_df["ais_before_t0"][idx] = segments[0] # Keep only negative segment
+                        zero_intersection = find_xy(p0, p1, 0) # Find the XY where Z=0
+                        segments = cut(vessel, vessel.project(zero_intersection))
+                        ssvid_df["ais_before_t0"].loc[idx] = segments[0] if segments else None # Keep only negative segment                        
                         break
 
             # Calculate the Mean Absolute Error for each AIS Track
-            ssvid_df['coinc_score'] = [slick_samples_gs.distance(vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+            # XXX Note that "if vessel else None" means that we are ignoring vessels that only broadcast AIS AFTER the image was captured (this is not ideal)
+            ssvid_df['coinc_score'] = [slick_samples_gs.apply(func=z_linestring_dist, z_line_string=vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+
+            # # Suggest Abstention
+            # abstain_threshold = 0.05 # This is a threshold value that determines how often we abstain from blaming a vessel in the picture (default = 0.01). Raise the value to make it more likely to blame a vessel.
+            # ssvid_df = ssvid_df.append(pd.Series({'coinc_score':abstain_threshold},name="^^^ Abstain Above^^^"))
+
             if return_count:
-                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'].tail(return_count))
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")["coinc_score"].tail(return_count))
             else:
-                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")['coinc_score'])
+                print(ssvid_df.sort_values('coinc_score', ascending=False, na_position="first")["coinc_score"])
             print(pid)
 
 # %%
+
+# # %%
 # % matplotlib inline
+# from pathlib import Path
+# from configs import path_config
+# import geopandas as gpd
+# import numpy as np
+# from shapely.geometry import Polygon#, Point, LineString, shape, MultiPolygon, MultiPoint
+
+# fdir = Path(path_config.LOCAL_DIR)/"temp/outputs/"
+# ais_dir = fdir/"ais"
+# vect_dir = fdir/"vectors"
 
 # def rect_to_bowtie(shapely_rectangle, stretch_factor=1, spread_factor=1):
 #     pp = [np.array(pnt) for pnt in shapely_rectangle.exterior.coords[:-1]]
@@ -205,7 +268,7 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
 #     else: 
 #         return combine(one_step_deeper)
     
-# pid = "S1B_IW_GRDH_1SDV_20210108T152831_20210108T152900_025065_02FBC1_5A3D"
+# pid = "S1A_IW_GRDH_1SDV_20200814T105729_20200814T105754_033902_03EE9F_3456"
 # geojson_path = vect_dir/(pid+".geojson")
 # orig_gdf = gpd.GeoDataFrame.from_file(geojson_path).explode()
 # # TODO: Set Index equal to the PosiPoly_ID
@@ -224,4 +287,5 @@ def mae_ranking(pids, return_count=None, num_samples=100, vel=20):
 # bowties.plot()
 # orig_gdf.plot()
 
-#     # %%
+
+# %%

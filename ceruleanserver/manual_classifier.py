@@ -5,7 +5,7 @@ db = "cerulean"
 current_class = None
 start_date = "2020-01-01"
 end_date = "2022-01-01"
-# Default: Order by polsby-popper
+# Default: Order by polsby-popper polygon Perimeter^2/Area
 set_by_area = False # Order by absolute area instead
 set_by_linear = True # Order by polsby-popper multiplied by rectangular fill-factor
 
@@ -27,6 +27,7 @@ from geoalchemy2 import Geography, Geometry
 import shutil
 from IPython.display import clear_output
 import matplotlib.patches as patches
+import pandas.io.clipboard as pyperclip
 
 processed_pids = []
 outpath = Path(path_config.LOCAL_DIR) / "temp" / "outputs"
@@ -58,6 +59,7 @@ class_int_dict = {
 }
 ocean_path = Path(path_config.LOCAL_DIR) / "aux_files" / "OceanGeoJSON_lowres.geojson"
 ocean = geopandas.read_file(ocean_path)
+print("Open 'infrastructure_context.qgz' when making determinations")
 
 
 def get_unclassified_polys(sess, by_area, by_linear, start, end):
@@ -163,15 +165,17 @@ with session_scope(commit=True, database=db, echo=False) as sess:
         vect = geopandas.GeoDataFrame({"geometry": poly_shapes})
         # largest = vect.iloc[[vect.length.values.argmax()]]
 
-        print("Plotting image")
         clear_output(wait=True)
+        print("Plotting image:", grd.pid)
+        pyperclip.copy(grd.pid) # Store grd.pid in the copy/paste clipboard
+        
         zoom_level = 2
         plot_super(vect=ocean, patch=rast, edgecolor="black", facecolor="xkcd:light blue", box_factor=30)
         plot_super(rast=rast, vect=vect)
-        plot_super(rast=rast)
+        # plot_super(rast=rast)
         plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=.25, zoom=zoom_level)
-        plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=1.25, zoom=zoom_level-1)
-        print(grd.pid)
+        # plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=1.25, zoom=zoom_level-1)
+        # print(grd.pid)
         # print(grd.calc_eezs())
 
         category = "No Category Assigned"

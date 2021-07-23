@@ -11,19 +11,24 @@ from sqlalchemy import (
     Numeric,
 )
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import reconstructor
 from sqlalchemy.ext.declarative import declarative_base
 from geoalchemy2 import Geography
 from configs import server_config
 
 Base = declarative_base()
 
+# TODO remove session knowledge from bases. Instead, create other functions to accomplish that
 
 class SmartBase(Base):
     __abstract__ = True
     __tablename__ = "NO_TABLE_NAME_SET"
 
     loaded_from_db = False
+    
+    @reconstructor # This code will be run once when this object is loaded from the DB. It cannot accept parameters
+    def init_on_load(self):
+        self.loaded_from_db = True
 
     # XXXHELP Why doesn't the load pathway work??!
     def load_or_insert(self, sess, filter_attrs=[]):
@@ -80,14 +85,6 @@ class Sns(SmartBase):
     subject = Column(String)
     timestamp = Column(DateTime)
 
-    grd = relationship(
-        "Grd",
-        back_populates="sns",
-        uselist=False,
-        enable_typechecks=False,  # XXXHELP How can I do this without disabling typechecks?
-        cascade_backrefs=False,
-    )
-
 
 class Grd(SmartGeo):
     __tablename__ = "grd"
@@ -102,28 +99,7 @@ class Grd(SmartGeo):
     scihubingestion = Column(DateTime)
     starttime = Column(DateTime)
     stoptime = Column(DateTime)
-
-    sns = relationship(
-        "Sns",
-        back_populates="grd",
-        foreign_keys=sns__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    ocn = relationship(
-        "Ocn",
-        back_populates="grd",
-        uselist=False,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    inferences = relationship(
-        "Inference",
-        back_populates="grd",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-
+    
 
 class Ocn(SmartBase):
     __tablename__ = "ocn"
@@ -134,20 +110,6 @@ class Ocn(SmartBase):
     summary = Column(String)
     producttype = Column(String)
     filename = Column(String)
-
-    grd = relationship(
-        "Grd",
-        back_populates="ocn",
-        foreign_keys=grd__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    inferences = relationship(
-        "Inference",
-        back_populates="ocn",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
 
 
 class Inference(SmartBase):
@@ -162,27 +124,6 @@ class Inference(SmartBase):
     chip_size_reduced = Column(Integer)
     overhang = Column(Boolean)
 
-    grd = relationship(
-        "Grd",
-        back_populates="inferences",
-        foreign_keys=grd__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    ocn = relationship(
-        "Ocn",
-        back_populates="inferences",
-        foreign_keys=ocn__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    posi_polys = relationship(
-        "Posi_Poly",
-        back_populates="inference",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-
 
 class Posi_Poly(SmartGeo):
     __tablename__ = "posi_poly"
@@ -190,27 +131,6 @@ class Posi_Poly(SmartGeo):
     inference__id = Column(Integer, ForeignKey("inference.id"))
     slick__id = Column(Integer, ForeignKey("slick.id"))
     class_int = Column(Integer)
-
-    inference = relationship(
-        "Inference",
-        back_populates="posi_polys",
-        foreign_keys=inference__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    slick = relationship(
-        "Slick",
-        back_populates="posi_polys",
-        foreign_keys=slick__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    coincidents = relationship(
-        "Coincident",
-        back_populates="posi_poly",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
 
 
 class Vessel(SmartBase):
@@ -223,13 +143,6 @@ class Vessel(SmartBase):
     imo = Column(String)
     shiptype = Column(String)
     length = Column(Numeric)
-
-    coincidents = relationship(
-        "Coincident",
-        back_populates="vessel",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
 
 
 class Coincident(SmartGeo):
@@ -249,33 +162,11 @@ class Coincident(SmartGeo):
     cargo_type = Column(String)
     cargo_amount = Column(String)
 
-    posi_poly = relationship(
-        "Posi_Poly",
-        back_populates="coincidents",
-        foreign_keys=posi_poly__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-    vessel = relationship(
-        "Vessel",
-        back_populates="coincidents",
-        foreign_keys=vessel__id,
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
-
 
 class Slick(SmartBase):
     __tablename__ = "slick"
     id = Column(Integer, Sequence(f"{__tablename__}_id_seq"), primary_key=True)
     class_int = Column(Integer)
-
-    posi_polys = relationship(
-        "Posi_Poly",
-        back_populates="slick",
-        enable_typechecks=False,
-        cascade_backrefs=False,
-    )
 
 
 class Eez(SmartGeo):
