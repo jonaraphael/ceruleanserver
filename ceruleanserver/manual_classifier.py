@@ -28,6 +28,8 @@ import shutil
 from IPython.display import clear_output
 import matplotlib.patches as patches
 import pandas.io.clipboard as pyperclip
+import pandas as pd
+from shapely.geometry import box
 
 processed_pids = []
 outpath = Path(path_config.LOCAL_DIR) / "temp" / "outputs"
@@ -59,6 +61,10 @@ class_int_dict = {
 }
 ocean_path = Path(path_config.LOCAL_DIR) / "aux_files" / "OceanGeoJSON_lowres.geojson"
 ocean = geopandas.read_file(ocean_path)
+infra_path = Path(path_config.LOCAL_DIR) / "aux_files" / "detections_2020_infrastructureOnly_v20210604_buffered_dissolved_centroids.csv"
+infra_df = pd.read_csv(infra_path)
+infra = geopandas.GeoDataFrame(infra_df, geometry=geopandas.points_from_xy(infra_df.Lon, infra_df.Lat))
+
 print("Open 'infrastructure_context.qgz' when making determinations")
 
 
@@ -99,25 +105,38 @@ def get_unclassified_polys(sess, by_area, by_linear, start, end):
 def download_grds(grds, separate_process):
     sync_grds_and_vecs([grd.pid for grd in grds], separate_process)
 
-def plot_super(rast=None, vect=None, zoom=None, box_factor=None, patch=None, edgecolor="red", facecolor="none", vect_line=1):
+def plot_super(rast=None, vect=None, patch=None, zoom=None, box_factor=0, edgecolor="red", facecolor="none", vect_line=1,  plot_ocean=False, plot_infra=False):
     size = 10 * (zoom or 1)
     fig, ax = plt.subplots(figsize=(size,size))
+
+    if patch is not None:
+        aoi = patch.bounds
+    elif box_factor and vect is not None:
+        aoi = vect.total_bounds
+    else:
+        aoi = rast.bounds
+
+    xmin, ymin, xmax, ymax = aoi
+    w = abs(xmax - xmin) * box_factor / 2
+    h = abs(ymax - ymin) * box_factor / 2
+    viewport = box(xmin-w, ymin-h, xmax+w, ymax+h)
+    ax.set_xlim([xmin-w, xmax+w])
+    ax.set_ylim([ymin-h, ymax+h])
+
+
+    if plot_ocean:
+        ocean.plot(edgecolor="black", facecolor="xkcd:light blue", linewidth=1, ax=ax)
     if rast is not None:
         rasterio.plot.show(rast, ax=ax)
     if vect is not None:
         vect.plot(facecolor=facecolor, edgecolor=edgecolor, linewidth=vect_line, ax=ax)
-        if box_factor:
-            w = abs(vect.total_bounds[2] - vect.total_bounds[0]) * box_factor / 2
-            h = abs(vect.total_bounds[3] - vect.total_bounds[1]) * box_factor / 2
-            ax.set_xlim([vect.total_bounds[0] - w, vect.total_bounds[2] + w])
-            ax.set_ylim([vect.total_bounds[1] - h, vect.total_bounds[3] + h])
     if patch is not None:
         ax.add_patch(rast_to_patch(patch))
-        if box_factor:
-            w = abs(patch.bounds[2] - patch.bounds[0]) * box_factor / 2
-            h = abs(patch.bounds[3] - patch.bounds[1]) * box_factor / 2
-            ax.set_xlim([patch.bounds[0] - w, patch.bounds[2] + w])
-            ax.set_ylim([patch.bounds[1] - h, patch.bounds[3] + h])
+    if plot_infra:
+        reduced_infra= geopandas.clip(infra, viewport)
+        if len(reduced_infra):
+            reduced_infra.plot(color='orange', marker='o', markersize=20, ax=ax)
+
     plt.show()
     print(".")
 
@@ -170,23 +189,19 @@ with session_scope(commit=True, database=db, echo=False) as sess:
         pyperclip.copy(grd.pid) # Store grd.pid in the copy/paste clipboard
         
         zoom_level = 2
-        plot_super(vect=ocean, patch=rast, edgecolor="black", facecolor="xkcd:light blue", box_factor=30)
-        plot_super(rast=rast, vect=vect)
-        # plot_super(rast=rast)
-        plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=.25, zoom=zoom_level)
-        # plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=1.25, zoom=zoom_level-1)
-        # print(grd.pid)
-        # print(grd.calc_eezs())
+        plot_super(plot_ocean=True, patch=rast, box_factor=30)
+        plot_super(rast=rast, vect=vect, plot_infra=True)
+        plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=.5, zoom=zoom_level, plot_infra=True)
 
         category = "No Category Assigned"
         while category.lower() not in class_int_dict:
             category = input("""Class: (V)essel, (F)ixed, (A)mbiguous, (N)one || Zoom: (I)nset, (O)utset || (Q)uit and save . . . . . . . .""")
             if category.lower() == "i":
                 zoom_level += 1
-                plot_super(rast=rast, vect=vect, vect_line=.1, box_factor=1, zoom=zoom_level)
+                plot_super(rast=rast, vect=vect, vect_line=.1, box_factor=1, zoom=zoom_level, plot_infra=True)
             elif category.lower() == "o":
                 zoom_level += 1
-                plot_super(rast=rast, vect=vect, vect_line=.1, zoom=zoom_level)
+                plot_super(rast=rast, vect=vect, vect_line=.1, zoom=zoom_level, plot_infra=True)
         if category.lower() == "q":
             break
         elif category.lower() != " ":
