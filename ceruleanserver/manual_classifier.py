@@ -2,12 +2,15 @@
 %matplotlib inline
 
 db = "cerulean"
-current_class = None
+current_class = None # Human labeled class
 start_date = "2020-01-01"
-end_date = "2022-01-01"
+end_date = "2023-01-01"
 # Default: Order by polsby-popper polygon Perimeter^2/Area
 set_by_area = False # Order by absolute area instead
 set_by_linear = True # Order by polsby-popper multiplied by rectangular fill-factor
+
+manual_pids = [
+]
 
 from db_connection import session_scope
 from utils.s3 import sync_grds_and_vecs
@@ -68,16 +71,18 @@ infra = geopandas.GeoDataFrame(infra_df, geometry=geopandas.points_from_xy(infra
 print("Open 'infrastructure_context.qgz' when making determinations")
 
 
-def get_unclassified_polys(sess, by_area, by_linear, start, end):
+def get_unclassified_polys(sess, by_area, by_linear, start=None, end=None, pids=[]):
     q = (
         sess.query(Grd_Ext)
         .join(Inference_Ext)
         .join(Posi_Poly_Ext)
         .join(Slick_Ext)
         .filter(Slick_Ext.class_int == current_class)
-        .filter(Grd_Ext.starttime >= start)
-        .filter(Grd_Ext.starttime < end)
     )
+    if start:
+        q = q.filter(Grd_Ext.starttime >= start)
+    if end:
+        q=q.filter(Grd_Ext.starttime < end)
     if by_area:
         q = q.order_by(desc(func.ST_Area(Posi_Poly_Ext.geometry)))
     elif by_linear:
@@ -98,6 +103,8 @@ def get_unclassified_polys(sess, by_area, by_linear, start, end):
                 * func.ST_Perimeter(Posi_Poly_Ext.geometry)
             )
         )
+    if pids:
+        q=q.filter(Grd_Ext.pid.in_(pids))
 
     return q.distinct().all()
 
@@ -155,7 +162,10 @@ def rast_to_patch(rast):
 
 
 with session_scope(commit=True, database=db, echo=False) as sess:
-    grd_list = get_unclassified_polys(sess, set_by_area, set_by_linear, start_date, end_date)
+    if manual_pids:
+        grd_list = get_unclassified_polys(sess, set_by_area, set_by_linear, pids=manual_pids)
+    else:
+        grd_list = get_unclassified_polys(sess, set_by_area, set_by_linear, start_date, end_date)
     print("Found", len(grd_list), "GRDs")
     print(f"Loading first GRD")
     download_grds([grd_list[0]], separate_process=False)

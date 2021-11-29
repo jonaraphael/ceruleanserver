@@ -53,6 +53,7 @@ def download_ais(t_stamp, poly, back_window, forward_window):
         ORDER BY 
         ssvid, timestamp
     """
+        # AND seg.source = "spire"
     return pandas_gbq.read_gbq(sql, project_id=project_id)
 
 def segment_splitter(curve):
