@@ -8,6 +8,8 @@ end_date = "2023-01-01"
 # Default: Order by polsby-popper polygon Perimeter^2/Area
 set_by_area = False # Order by absolute area instead
 set_by_linear = True # Order by polsby-popper multiplied by rectangular fill-factor
+use_qgis = False # Display downloaded images in QGIS rather than in the iPython window
+use_ee = True # Display streamed images in from EE rather than downloading
 
 manual_pids = [
 ]
@@ -33,6 +35,8 @@ import matplotlib.patches as patches
 import pandas.io.clipboard as pyperclip
 import pandas as pd
 from shapely.geometry import box
+from subprocess import call
+from ee_viewer import context_map
 
 processed_pids = []
 outpath = Path(path_config.LOCAL_DIR) / "temp" / "outputs"
@@ -49,17 +53,17 @@ class_int_dict = {
     "18": 18, # Vessel: Recent
     "19": 19, # Vessel: Adjacent
     "6": 6, # Infrastructure
-    "7": 7, # Shipwreck
+    # "7": 7, # Shipwreck
     "8": 8, # Anchorage
     "9": 9, # Natural Seep
-    "10": 10, # Wind
-    "11": 11, # Precipitation
-    "12": 12, # Suspended Particles
-    "13": 13, # Organic
+    "10": 10, # Slack Water
+    "11": 11, # Weather
+    "12": 12, # Convergence Zone
+    "13": 13, # Ice
     "14": 14, # Wake
-    "15": 15, # Waves
+    "15": 15, # Internal Waves
     "16": 16, # Unknown
-    "17": 17, # Land
+    "17": 17, # Land/Coast/Shore/Reef
     "20": 20, # Duplicate GRD
 }
 ocean_path = Path(path_config.LOCAL_DIR) / "aux_files" / "OceanGeoJSON_lowres.geojson"
@@ -69,7 +73,6 @@ infra_df = pd.read_csv(infra_path)
 infra = geopandas.GeoDataFrame(infra_df, geometry=geopandas.points_from_xy(infra_df.Lon, infra_df.Lat))
 
 print("Open 'infrastructure_context.qgz' when making determinations")
-
 
 def get_unclassified_polys(sess, by_area, by_linear, start=None, end=None, pids=[]):
     q = (
@@ -110,7 +113,7 @@ def get_unclassified_polys(sess, by_area, by_linear, start=None, end=None, pids=
 
 
 def download_grds(grds, separate_process):
-    sync_grds_and_vecs([grd.pid for grd in grds], separate_process)
+    sync_grds_and_vecs([grd.pid for grd in grds], separate_process, overwrite=True, download_grds=not use_ee)
 
 def plot_super(rast=None, vect=None, patch=None, zoom=None, box_factor=0, edgecolor="red", facecolor="none", vect_line=1,  plot_ocean=False, plot_infra=False):
     size = 10 * (zoom or 1)
@@ -176,6 +179,7 @@ with session_scope(commit=True, database=db, echo=False) as sess:
             download_grds([grd_list[i + 1]], separate_process=True)
 
         raster_path = outpath / f"rasters/{grd.pid}.tiff"
+        vector_path = outpath / f"vectors/{grd.pid}.geojson"
         warped_path = raster_path.with_name("warped.tif")
 
         while not raster_path.exists():  # This crashes if the file isn't on S3!
@@ -195,13 +199,20 @@ with session_scope(commit=True, database=db, echo=False) as sess:
         # largest = vect.iloc[[vect.length.values.argmax()]]
 
         clear_output(wait=True)
-        print("Plotting image:", grd.pid)
         pyperclip.copy(grd.pid) # Store grd.pid in the copy/paste clipboard
-        
         zoom_level = 2
-        plot_super(plot_ocean=True, patch=rast, box_factor=30)
-        plot_super(rast=rast, vect=vect, plot_infra=True)
-        plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=.5, zoom=zoom_level, plot_infra=True)
+
+        if use_qgis:
+            call(['open', '-a' '/Applications/QGIS3.8.app', str(raster_path)])
+            call(['open', '-a' '/Applications/QGIS3.8.app', str(vector_path)])
+        elif use_ee:
+            context_map([grd.pid])
+        else:
+            print("Plotting image:", grd.pid)
+            
+            plot_super(plot_ocean=True, patch=rast, box_factor=30)
+            plot_super(rast=rast, vect=vect, plot_infra=True)
+            plot_super(rast=rast, vect=vect, vect_line=.2, box_factor=.5, zoom=zoom_level, plot_infra=True)
 
         category = "No Category Assigned"
         while category.lower() not in class_int_dict:

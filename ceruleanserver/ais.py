@@ -508,7 +508,7 @@ d_format = "%Y-%m-%d"
 t_format = "%Y-%m-%d %H:%M:%S"
 
 
-def download_ais(pid, poly, back_window=12, forward_window=1.5):
+def download_ais(pid, poly=poly, back_window=12, forward_window=1.5):
     time_from_pid = pid.split('_')[4]
     t_stamp = datetime.strptime(time_from_pid, in_format)
 
@@ -565,7 +565,7 @@ for pid in targets:
     ais_path = fdir/"ais"/(pid+".csv")
     if not ais_path.exists():
         rect = rectangle_from_pid(pid)
-        df = download_ais(pid, str(rect))
+        df = download_ais(pid, poly=str(rect))
         df.to_csv(ais_path)
 
 # %%

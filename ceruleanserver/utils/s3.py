@@ -99,24 +99,32 @@ def download_prefix(
                 bucket.download_file(object.key, str(fpath))
 
 
-def sync_grds_and_vecs(pids, separate_process=False, download_grds=True, download_vecs=True):
+def sync_grds_and_vecs(pids, separate_process=False, download_grds=True, download_vecs=True, overwrite=True):
     max_search_qty = 200
     for first in range(0, len(pids), max_search_qty):
         # if this cmd grows too long (e.g. 100 elements), it goes super slow! 
         # This loop runs it on every N elements serially.
         last = first + max_search_qty
-        cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --exclude "*" '
-        
-        if download_grds:
-            include_tiffs = " ".join([f'--include "rasters/{pid}.tiff" ' for pid in pids[first:last]])
-            cmd = cmd + include_tiffs
-        if download_vecs:
-            include_geos = " ".join([f'--include "vectors/{pid}.geojson" ' for pid in pids[first:last]])
-            cmd = cmd + include_geos
+
+        if overwrite:
+            cmd = ""
+            # cmd = f'aws s3 cp --dryrun s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --recursive --exclude "*" '
+            if download_grds:
+                include_tiffs = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/rasters/{pid}.tiff {path_config.LOCAL_DIR}temp/outputs/rasters/ ' for pid in pids[first:last]])
+                cmd = cmd + include_tiffs + "; "
+            if download_vecs:
+                include_geos = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/vectors/{pid}.geojson {path_config.LOCAL_DIR}temp/outputs/vectors/ ' for pid in pids[first:last]])
+                cmd = cmd + include_geos + "; "
+        else:
+            cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --exclude "*" '                    
+            if download_grds:
+                include_tiffs = " ".join([f'--include "rasters/{pid}.tiff" ' for pid in pids[first:last]])
+                cmd = cmd + include_tiffs
+            if download_vecs:
+                include_geos = " ".join([f'--include "vectors/{pid}.geojson" ' for pid in pids[first:last]])
+                cmd = cmd + include_geos
 
         if separate_process:
             Popen(cmd, shell=True)
         else:
             run(cmd, shell=True)
-
-

@@ -10,6 +10,7 @@ from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon, Mu
 from shapely.ops import split
 from ml.vector_processing import geojson_to_shapely_multi
 import numpy as np
+from google.oauth2 import service_account
 
 # Load from config
 project_id = "world-fishing-827"
@@ -21,39 +22,55 @@ fdir = Path(path_config.LOCAL_DIR)/"temp/outputs/"
 ais_dir = fdir/"ais"
 vect_dir = fdir/"vectors"
 
+pandas_gbq.context.project = project_id
 
-def download_ais(t_stamp, poly, back_window, forward_window):
-    sql = f"""
+
+
+def download_ais(t_stamp, back_window, forward_window, spire_only=False, sql=None, ssvids = None, poly = None):
+    sql = sql or f"""
         SELECT * FROM(
         SELECT 
         seg.ssvid as ssvid, 
         seg.timestamp as timestamp, 
         seg.lon as lon, 
         seg.lat as lat,
+        seg.course as course,
+        seg.speed_knots as speed_knots,
         ves.ais_identity.shipname_mostcommon.value as shipname,
         ves.ais_identity.shiptype[SAFE_OFFSET(0)].value as shiptype,
         ves.best.best_flag as flag,
         ves.best.best_vessel_class as best_shiptype
         FROM 
         `world-fishing-827.gfw_research.pipe_v20201001` as seg
-        JOIN 
+        LEFT JOIN 
         `world-fishing-827.gfw_research.vi_ssvid_v20201209` as ves
         ON seg.ssvid = ves.ssvid
         
         WHERE
-        seg._PARTITIONTIME >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), d_format)}'
-        AND seg._PARTITIONTIME <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), d_format)}'
-        AND seg.timestamp >= '{datetime.strftime(t_stamp-timedelta(hours=back_window), t_format)}'
-        AND seg.timestamp <= '{datetime.strftime(t_stamp+timedelta(hours=forward_window), t_format)}'
+        seg._PARTITIONTIME between '{datetime.strftime(t_stamp-timedelta(hours=back_window), d_format)}' AND '{datetime.strftime(t_stamp+timedelta(hours=forward_window), d_format)}'
+        AND seg.timestamp between '{datetime.strftime(t_stamp-timedelta(hours=back_window), t_format)}' AND '{datetime.strftime(t_stamp+timedelta(hours=forward_window), t_format)}'
+        """
+    if poly:
+        sql = sql + f"""
         AND ST_COVEREDBY(ST_GEOGPOINT(seg.lon, seg.lat), ST_GeogFromText('{poly}'))
-
+        """
+    if ssvids:
+        sql = sql + f"""
+        AND seg.ssvid in (
+            '{"', '".join([str(ssvid) for ssvid in ssvids])}'
+        )
+        """
+    if spire_only:
+        sql = sql + f"""
+        AND seg.source = 'spire'
+        """
+    sql = sql + f"""
         ORDER BY
         seg.timestamp DESC
         )
         ORDER BY 
         ssvid, timestamp
-    """
-        # AND seg.source = "spire"
+        """
     return pandas_gbq.read_gbq(sql, project_id=project_id)
 
 def segment_splitter(curve):
@@ -88,14 +105,14 @@ def disc_from_point(longitude, latitude, buff):
     g = shape(Point(longitude, latitude))
     return g.buffer(buff)
 
-def sync_ais_from_point_time(longitude, latitude, tstamp, back_window=12, forward_window=1.5, buff=.5):
+def sync_ais_from_point_time(longitude, latitude, tstamp, back_window=12, forward_window=1.5, buff=.5, spire_only=False):
     # tstamp must be a string in this format: "%Y%m%dT%H%M%S"
     ais_dir.mkdir(parents=True, exist_ok=True)    
     ais_path = ais_dir/(str(tstamp)+"_"+str(longitude)+"_"+str(latitude)+".geojson")
     if not ais_path.exists():
         disc = disc_from_point(longitude, latitude, buff)
         t_stamp = datetime.strptime(tstamp, in_format)
-        df = download_ais(t_stamp, str(disc), back_window, forward_window)
+        df = download_ais(t_stamp, back_window, forward_window, spire_only, poly = str(disc))
         gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
         if len(df)>0:
             gdf.to_file(ais_path, driver="GeoJSON")
@@ -104,7 +121,7 @@ def sync_ais_from_point_time(longitude, latitude, tstamp, back_window=12, forwar
     else:
         print("AIS already downloaded for", ais_path.name)    
 
-def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5):
+def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5, spire_only=False):
     ais_dir.mkdir(parents=True, exist_ok=True)
     for pid in pids:
         ais_path = ais_dir/(pid+".geojson")
@@ -115,7 +132,7 @@ def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5):
             rect = rectangle_from_pid(pid, buff)
             time_from_pid = pid.split('_')[4]
             t_stamp = datetime.strptime(time_from_pid, in_format)
-            df = download_ais(t_stamp, str(rect), back_window, forward_window)
+            df = download_ais(t_stamp, back_window, forward_window, spire_only, poly = str(rect))
             gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
             if len(df)>0:
                 gdf.to_file(ais_path, driver="GeoJSON")
