@@ -270,7 +270,30 @@ def mae_ranking(pids, return_count=None, num_samples=50, vel=1):
 
             # Calculate the Mean Absolute Error for each AIS Track
             # XXX Note that "if vessel else None" means that we are ignoring vessels that only broadcast AIS AFTER the image was captured (this is not ideal)
-            ssvid_df['coinc_score'] = [slick_samples_gs.apply(func=z_linestring_dist, z_line_string=vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+            # ssvid_df['coinc_score'] = [slick_samples_gs.apply(func=z_linestring_dist, z_line_string=vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error
+
+            # Attempt to make the above line more efficient by introducing early stopping
+            if return_count/len(ssvid_df) <.25: # Ideally, this version would be strictly faster than the other, but it is currently less optimized, and so slower if return_count is a large percent of the total
+                ssvid_df['coinc_score'] = np.nan
+                minimum_errors = [np.inf]*return_count
+                for idx, vessel in ssvid_df["ais_before_t0"].iteritems():
+                    if vessel:
+                        error_threshold = max(minimum_errors)
+                        error_sum = 0
+                        skip = False
+                        for sample in slick_samples_gs:
+                            error_sum += z_linestring_dist(sample, z_line_string=vessel)
+                            if error_sum/num_samples > error_threshold:
+                                skip = True
+                                break
+                        if not skip:
+                            minimum_errors.append(error_sum/num_samples)
+                            minimum_errors.sort()
+                            minimum_errors.pop()
+                            ssvid_df.at[idx,'coinc_score'] = error_sum/num_samples
+            else:
+                ssvid_df['coinc_score'] = [slick_samples_gs.apply(func=z_linestring_dist, z_line_string=vessel).mean() if vessel else None for vessel in ssvid_df["ais_before_t0"]] # Mean Absolute Error                        
+                    
 
             # # Suggest Abstention
             # abstain_threshold = 0.05 # This is a threshold value that determines how often we abstain from blaming a vessel in the picture (default = 0.01). Raise the value to make it more likely to blame a vessel.
