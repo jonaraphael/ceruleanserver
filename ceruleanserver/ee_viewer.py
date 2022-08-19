@@ -36,19 +36,16 @@ def context_map(pid_group, show_inference=True, show_ais=True, exit_on_failure=F
             if show_ais:
                 attempt = "AIS"
                 ais_csv = f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ais/{pid}.csv"
-                Map.add_points_from_xy(layer_name=f'AIS-{pid}', data=ais_csv, x="lon", y="lat", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"])
+                Map.add_points_from_xy(layer_name=f'AIS-{pid}', data=ais_csv, x="lon", y="lat", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"], color_column="ssvid", icon_names=['circle'], icon_colors=['black']) # XXX WARNING! This depends on having an edited version of foliumap.py!!! Ask Jona for a copy
 
-                # Map.add_circle_markers_from_xy(data=df, x="lon", y="lat", radius=10, color="blue", fill_color="black", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"])
-                # colors = df["ssvid"].map(lambda ssvid: "%0.6X" % (ssvid % 0xFFFFFF)) # Base color on modulo ssvid to make consistent randomized color schema of vessels
-                # add_points_from_xy(min_width=100, max_width=200, marker_colors=None, icon_colors=['white'], icon_names=['info'], angle=0, prefix='fa', add_legend=True, **kwargs)[source]                
-                # ais_styles = {f"{ssvid}":{"pointShape": "circle", "color":f"{randbytes(3).hex()}F", "pointSize":1, "width":.1 } for ssvid in df.ssvid.unique()}
         except Exception as e:
             print(f"{attempt} missing for {pid} ")
             if exit_on_failure: raise e
+        print(pid)
 
     Map.add_wms_layer(name='Vessel Density', shown=False, url="https://gmtds.maplarge.com/ogc/ais:density/wms?", layers = ['ais:density']) # https://maplarge-public.s3.us-east-1.amazonaws.com/UserGuides/GMTDS_Technical_Integration_Guide.pdf        
     Map.addLayer(name='Infrastructure', shown=False, ee_object=ee.FeatureCollection("projects/cerulean-338116/assets/GFW_Infra").map(partial(set_style, style_dict=infra_styles, class_column='label')).style(styleProperty='style_params')) # Syling parameters: https://developers.google.com/earth-engine/apidocs/ee-featurecollection-style
-    Map.addLayer(name='FPSOs', shown=True, ee_object=geemap.geojson_to_ee("/Users/jonathanraphael/git/ceruleanserver/local/aux_files/Most recent FPSOs.geojson").style(pointShape="s", color="0FFB", pointSize=5, width=.1))
+    Map.addLayer(name='FPSOs', shown=True, ee_object=geemap.geojson_to_ee("/Users/jonathanraphael/git/ceruleanserver/local/aux_files/FPSOs_2022-07_LAST.geojson").style(pointShape="s", color="0FFB", pointSize=5, width=.1))
     Map.addLayer(name='Leaky Infrastructure', shown=True, ee_object=geemap.geojson_to_ee("/Users/jonathanraphael/git/ceruleanserver/local/aux_files/Global Coincident Infrastructure.geojson").style(pointShape="cross", color="F00F", pointSize=5, width=.01))
 
     display(Map)
