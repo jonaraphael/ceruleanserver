@@ -1219,6 +1219,9 @@ def geojson_to_ee(geo_json, geodesic=False, encoding="utf-8"):
             else:
                 geom = ee.Geometry(geo_json["geometry"], "", geodesic)
             return geom
+        elif geo_json["type"] == "MultiPolygon":
+            geom = ee.Geometry.MultiPolygon(geo_json["coordinates"], proj="EPSG:4326", geodesic=geodesic)
+            return geom
         else:
             raise Exception("Could not convert the geojson to ee.Geometry()")
 

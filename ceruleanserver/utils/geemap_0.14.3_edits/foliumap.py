@@ -1469,12 +1469,12 @@ class Map(folium.Map):
             "purple",
             "orange",
             "darkred",
-            "lightred",
+            # "lightred",
             "beige",
             "darkblue",
             "darkgreen",
             "cadetblue",
-            "darkpurple",
+            # "darkpurple",
             "white",
             "pink",
             "lightblue",
@@ -1498,8 +1498,13 @@ class Map(folium.Map):
                 f"The color column {color_column} does not exist in the dataframe."
             )
 
+        randomize_colors = True # Hash the column before choosing a color for each row
+        
         if color_column is not None:
-            items = list(set(df[color_column]))
+            if randomize_colors:
+                items = color_options                
+            else:
+                items = list(set(df[color_column]))
         else:
             items = None
 
@@ -1541,7 +1546,7 @@ class Map(folium.Map):
         if y not in col_names:
             raise ValueError(f"y must be one of the following: {', '.join(col_names)}")
 
-        marker_cluster = plugins.MarkerCluster(name=layer_name).add_to(self)
+        marker_cluster = plugins.MarkerCluster(name=layer_name, options={"disableClusteringAtZoom":11}).add_to(self) # XXX Jona edited to show single markers earlier
 
         for row in df.itertuples():
             html = ""
@@ -1550,7 +1555,10 @@ class Map(folium.Map):
             popup_html = folium.Popup(html, min_width=min_width, max_width=max_width)
 
             if items is not None:
-                index = items.index(getattr(row, color_column))
+                if randomize_colors:
+                    index = hash(getattr(row,color_column))%len(color_options)
+                else:
+                    index = items.index(getattr(row, color_column))
                 marker_icon = folium.Icon(
                     color=marker_colors[index],
                     icon_color=icon_colors[index],
@@ -1567,11 +1575,11 @@ class Map(folium.Map):
                 icon=marker_icon,
             ).add_to(marker_cluster)
 
-        if items is not None and add_legend:
-            marker_colors = [check_color(c) for c in marker_colors]
-            self.add_legend(
-                title=color_column.title(), colors=marker_colors, labels=items
-            )
+        # if items is not None and add_legend:
+        #     marker_colors = [check_color(c) for c in marker_colors]
+        #     self.add_legend(
+        #         title=color_column.title(), colors=marker_colors, labels=items
+        #     )
 
     def add_circle_markers_from_xy(
         self,
