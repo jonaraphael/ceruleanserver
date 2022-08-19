@@ -1,16 +1,16 @@
 #%%
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas_gbq
 from pathlib import Path
 from configs import path_config
 import json
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, LineString, shape, Polygon, MultiPolygon, MultiPoint
-from shapely.ops import split
-from ml.vector_processing import geojson_to_shapely_multi
+from shapely.geometry import Point, LineString, shape, MultiPoint
 import numpy as np
-from google.oauth2 import service_account
+from os import makedirs
+import dateutil
+import plotly.graph_objects as go
 
 # Load from config
 project_id = "world-fishing-827"
@@ -72,6 +72,39 @@ def download_ais(t_stamp, back_window, forward_window, spire_only=False, sql=Non
         ssvid, timestamp
         """
     return pandas_gbq.read_gbq(sql, project_id=project_id)
+
+def bulk_download_ais(tstamp, ssvids, number_of_days = 1, single_file = True, add_max_dev=False):
+    # This code is used to grab historic AIS tracks of specific SSVIDs
+    df = download_ais(t_stamp = datetime.strptime(tstamp, in_format),  back_window = 0, forward_window = 24*number_of_days, ssvids=ssvids)
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
+
+    if len(df)>0:
+        makedirs("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/", exist_ok=True)
+        if add_max_dev:
+            stdev = gdf.groupby('ssvid').std()
+            gdf["max_dev"] = stdev[["lon", "lat"]].max(axis=1)
+        
+        gdf.sort_values(by="timestamp", ascending=False).drop_duplicates(subset='ssvid').to_file("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/custom_ais_download_LAST.geojson", driver="GeoJSON")
+        if single_file:
+            gdf.to_file("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/bulk_ais_download.geojson", driver="GeoJSON")
+        else:
+            for ssvid in gdf['ssvid'].unique().tolist():
+                gdf[gdf['ssvid'] == ssvid].to_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/split_files/{str(ssvid)}.geojson", driver="GeoJSON")
+    return gdf
+
+def plot_ais_over_time(bulk_df, ssvids=None):
+    # This function will plot the AIS broadcasts from multiple SSVIDs on a horizontal dot chart to show when they were or were not broadcasting
+    assert "ssvid" in bulk_df.keys() and "timestamp" in bulk_df.keys()
+    ssvids = bulk_df["ssvid"].unique() if ssvids is None else ssvids
+    # Create the figure
+    fig = go.Figure()
+    for i, ssvid in enumerate(ssvids):
+        df = bulk_df[bulk_df['ssvid']==ssvid]
+        datelist = df["timestamp"].map(dateutil.parser.parse).to_list()
+        fig.add_trace(go.Scatter(x=datelist, y=[-i] * len(datelist), mode="markers", marker_size=2, name=ssvid))
+    fig.update_yaxes( showgrid=False, zeroline=False, zerolinecolor="black", zerolinewidth=1, showticklabels=False)
+    fig.update_layout(height=200+20*len(ssvids), title=f"AIS Over Time")
+    fig.show()
 
 def segment_splitter(curve):
     return list(map(LineString, zip(curve.coords[:-1], curve.coords[1:])))
@@ -136,6 +169,7 @@ def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5, spire_only
             gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
             if len(df)>0:
                 gdf.to_file(ais_path, driver="GeoJSON")
+                gdf.to_csv(ais_path.with_suffix('.csv'))
             else:
                 print("No AIS data found for", pid)
         else:
@@ -154,6 +188,7 @@ def sample_shape(polygon, size, overestimate=2):
     return samples[np.random.choice(len(samples), size)]
 
 def find_xy(p1, p2, z):
+    # Find the point on the line segment between two 3D points [p1, p2] that has z value
     x1, y1, z1 = p1
     x2, y2, z2 = p2
     if z2 < z1:
@@ -204,7 +239,7 @@ def mae_ranking(pids, return_count=None, num_samples=50, vel=1):
             ais_df = gpd.read_file(ais_path).sort_values('timestamp')
 
             # Add DeltaTime column
-            capture_timestamp = datetime.strptime(pid.split("_")[4], in_format)
+            capture_timestamp = datetime.strptime(pid.split("_")[4], in_format).replace(tzinfo=timezone.utc)
             ais_df["delta_time"] = pd.to_datetime(ais_df["timestamp"], infer_datetime_format=True)-capture_timestamp
             ais_df["Z"] = ais_df["delta_time"].dt.total_seconds() / 3600 * vel / 111 # sec * hr/sec * km/hr * deg/km = deg
 

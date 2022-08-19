@@ -21,21 +21,45 @@ for p in pids:
     input('Press Enter to display next PID group.')
 
 # %%
+# This code is used to grab a disc of AIS around a lon/lat/tstamp
 from ais_funcs import sync_ais_from_point_time
 sync_ais_from_point_time(49.055373, 27.623153, '20220719T145035') # Lon Lat
 
 #%%
-from ais_funcs import download_ais, in_format
-from datetime import datetime
-from os import makedirs
-import geopandas as gpd
+# This code is used to grab historic AIS tracks of a list of specific SSVIDs
+from ais_funcs import bulk_download_ais
+bulk_df = bulk_download_ais(tstamp = '20210101T000000', ssvids = [657198000,], number_of_days = 7, add_max_dev=True)
 
-df = download_ais(t_stamp = datetime.strptime('20210101T000000', in_format),  back_window = 0, forward_window = 24*364, ssvids=[657198000])
-gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
-if len(df)>0:
-    makedirs("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ais/", exist_ok=True)
-    gdf.to_file("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ais/custom_ais_download.geojson", driver="GeoJSON")
+#%%
+# This code will plot the days that do or do not have AIS from each vessel in the bulk_df
+from ais_funcs import plot_ais_over_time
+# bulk_df = gpd.read_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/FPSOs_2022-07.geojson")
+plot_ais_over_time(bulk_df)
 
 #%%
 
+
+
+
+
+
+
+
+# %%
+# This code is used to parse the long-form outputs of Tatiana's IMO web scraper
+import pandas as pd
+fn = '/Users/jonathanraphael/Downloads/scraper_output_3.csv'
+df = pd.read_csv(fn, encoding = 'unicode_escape', header=None)
+column_names = ["Name", "IMO Number", "Flag", "Call sign", "MMSI", "Ship UN Sanction", "Owning/operating entity under UN Sanction", "Type", "Converted from", "Date of build", "Gross tonnage", "Registered owner"]
+reshaped = pd.DataFrame(columns = column_names)
+
+vessel_count = -1
+for i, item in df[0].iteritems():
+    idx = [key in item for key in column_names]
+    if any(idx):
+        col = column_names[idx.index(True)]
+        if col == "Name":
+            vessel_count+=1
+        reshaped.at[vessel_count, col] = item[(len(col)+1):]        
+reshaped.to_csv('/Users/jonathanraphael/Downloads/scraper_reshaped_3.csv')
 # %%
