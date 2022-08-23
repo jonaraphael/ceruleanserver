@@ -8,6 +8,7 @@ import pandas as pd
 import geopandas as gpd
 from functools import partial
 from pathlib import Path
+from configs import path_config
 ee.Initialize() # Initialize the library.
 
 infra_styles = {
@@ -16,9 +17,16 @@ infra_styles = {
     "other": {"pointShape": "circle", "color":"FF08", "pointSize":2, "width":.1 },
     }
 
+fdir = Path(path_config.LOCAL_DIR)/"temp/outputs/"
+ais_dir = fdir/"_ais"
+vect_dir = fdir/"_vectors"
+coincidence_dir = fdir/"_coincidence"
+
+
 def set_style(feature, style_dict, class_column): return feature.set('style_params', ee.Dictionary(style_dict).get(feature.get(class_column)))
     
-def context_map(pid_group, show_inference=True, show_ais=True, exit_on_failure=False):
+def context_map(pid_group, show_inference=True, show_ais=True, show_top_ranked=1, exit_on_failure=False):
+    # If show_top_ranked is set to an integer, then it will only display that number of vessels, sorted by their Coincidence Score, otherwise set to None or 0 to show them all
     IPython.display.clear_output()
     Map = geemap.Map() # Create a map https://github.com/giswqs/geemap
     for pid in pid_group:
@@ -30,13 +38,19 @@ def context_map(pid_group, show_inference=True, show_ais=True, exit_on_failure=F
 
             if show_inference:
                 attempt = "INFERENCE"
-                ee_inf = geemap.geojson_to_ee(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/vectors/{pid}.geojson")
+                ee_inf = geemap.geojson_to_ee(str(vect_dir/f"{pid}.geojson"))
                 Map.addLayer(name=f'INF-{pid}', shown=True, ee_object=ee_inf, vis_params={'color': 'red', 'opacity': ee.Number(.2)})
 
             if show_ais:
                 attempt = "AIS"
-                ais_csv = f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ais/{pid}.csv"
-                Map.add_points_from_xy(layer_name=f'AIS-{pid}', data=ais_csv, x="lon", y="lat", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"], color_column="ssvid", icon_names=['circle'], icon_colors=['black']) # XXX WARNING! This depends on having an edited version of foliumap.py!!! Ask Jona for a copy
+                ais_input = pd.read_csv(ais_dir/f"{pid}.csv")
+                coincidence_path = coincidence_dir/f"{pid}.csv"
+                if show_top_ranked and coincidence_path.exists():
+                    coincidence_df = pd.read_csv(coincidence_path, index_col="ssvid")
+                    if len(coincidence_df) < show_top_ranked:
+                        print(f"WARNING: {show_top_ranked} vessel tracks requested, but only {len(coincidence_df)} have been ranked.")
+                    ais_input = ais_input[ais_input["ssvid"].isin(coincidence_df.head(show_top_ranked).index)]
+                Map.add_points_from_xy(layer_name=f'AIS-{pid}', data=ais_input, x="lon", y="lat", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"], color_column="ssvid", icon_names=['circle'], icon_colors=['black']) # XXX WARNING! This depends on having an edited version of foliumap.py!!! Ask Jona for a copy
 
         except Exception as e:
             print(f"{attempt} missing for {pid} ")
@@ -45,8 +59,8 @@ def context_map(pid_group, show_inference=True, show_ais=True, exit_on_failure=F
 
     Map.add_wms_layer(name='Vessel Density', shown=False, url="https://gmtds.maplarge.com/ogc/ais:density/wms?", layers = ['ais:density']) # https://maplarge-public.s3.us-east-1.amazonaws.com/UserGuides/GMTDS_Technical_Integration_Guide.pdf        
     Map.addLayer(name='Infrastructure', shown=False, ee_object=ee.FeatureCollection("projects/cerulean-338116/assets/GFW_Infra").map(partial(set_style, style_dict=infra_styles, class_column='label')).style(styleProperty='style_params')) # Syling parameters: https://developers.google.com/earth-engine/apidocs/ee-featurecollection-style
-    Map.addLayer(name='FPSOs', shown=True, ee_object=geemap.geojson_to_ee("/Users/jonathanraphael/git/ceruleanserver/local/aux_files/FPSOs_2022-07_LAST.geojson").style(pointShape="s", color="0FFB", pointSize=5, width=.1))
-    Map.addLayer(name='Leaky Infrastructure', shown=True, ee_object=geemap.geojson_to_ee("/Users/jonathanraphael/git/ceruleanserver/local/aux_files/Global Coincident Infrastructure.geojson").style(pointShape="cross", color="F00F", pointSize=5, width=.01))
+    Map.addLayer(name='FPSOs', shown=True, ee_object=geemap.geojson_to_ee(f"{Path(path_config.LOCAL_DIR)}/aux_files/FPSOs_2022-07_LAST.geojson").style(pointShape="s", color="0FFB", pointSize=5, width=.1))
+    Map.addLayer(name='Leaky Infrastructure', shown=True, ee_object=geemap.geojson_to_ee(f"{Path(path_config.LOCAL_DIR)}/aux_files/Global Coincident Infrastructure.geojson").style(pointShape="cross", color="F00F", pointSize=5, width=.01))
 
     display(Map)
     return True

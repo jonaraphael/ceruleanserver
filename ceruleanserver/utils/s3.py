@@ -110,18 +110,18 @@ def sync_grds_and_vecs(pids, separate_process=False, download_grds=True, downloa
             cmd = ""
             # cmd = f'aws s3 cp --dryrun s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --recursive --exclude "*" '
             if download_grds:
-                include_tiffs = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/rasters/{pid}.tiff {path_config.LOCAL_DIR}temp/outputs/rasters/ ' for pid in pids[first:last]])
+                include_tiffs = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/rasters/{pid}.tiff {path_config.LOCAL_DIR}temp/outputs/_rasters/ ' for pid in pids[first:last]])
                 cmd = cmd + include_tiffs + "; "
             if download_vecs:
-                include_geos = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/vectors/{pid}.geojson {path_config.LOCAL_DIR}temp/outputs/vectors/ ' for pid in pids[first:last]])
+                include_geos = "; ".join([f'aws s3 cp s3://skytruth-cerulean/outputs/vectors/{pid}.geojson {path_config.LOCAL_DIR}temp/outputs/_vectors/ ' for pid in pids[first:last]])
                 cmd = cmd + include_geos + "; "
         else:
             cmd = f'aws s3 sync s3://skytruth-cerulean/outputs/ {path_config.LOCAL_DIR}temp/outputs/ --exclude "*" '                    
             if download_grds:
-                include_tiffs = " ".join([f'--include "rasters/{pid}.tiff" ' for pid in pids[first:last]])
+                include_tiffs = " ".join([f'--include "_rasters/{pid}.tiff" ' for pid in pids[first:last]])
                 cmd = cmd + include_tiffs
             if download_vecs:
-                include_geos = " ".join([f'--include "vectors/{pid}.geojson" ' for pid in pids[first:last]])
+                include_geos = " ".join([f'--include "_vectors/{pid}.geojson" ' for pid in pids[first:last]])
                 cmd = cmd + include_geos
 
         if separate_process:
