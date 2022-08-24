@@ -168,21 +168,25 @@ def sync_ais_files(pids, back_window=12, forward_window=1.5, buff=.5, spire_only
     for pid in pids:
         ais_path = ais_dir/(pid+".geojson")
         geojson_path = vect_dir/(pid+".geojson")
+
+        if ais_path.exists():
+            print(f"AIS already downloaded for {pid}")
+            continue
         if not geojson_path.exists():
-            print("No GeoJSON data found for", pid)
-        elif not ais_path.exists():
-            rect = rectangle_from_pid(pid, buff)
-            time_from_pid = pid.split('_')[4]
-            t_stamp = datetime.strptime(time_from_pid, in_format)
-            df = download_ais(t_stamp, back_window, forward_window, spire_only, poly = str(rect))
-            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
-            if len(df)>0:
-                gdf.to_file(ais_path, driver="GeoJSON")
-                gdf.to_csv(ais_path.with_suffix('.csv'), index=False)
-            else:
-                print("No AIS data found for", pid)
+            print(f"No GeoJSON data found for {pid}")
+            continue
+        
+        rect = rectangle_from_pid(pid, buff)
+        time_from_pid = pid.split('_')[4]
+        t_stamp = datetime.strptime(time_from_pid, in_format)
+        df = download_ais(t_stamp, back_window, forward_window, spire_only, poly = str(rect))
+        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
+        if len(df)>0:
+            gdf.to_file(ais_path, driver="GeoJSON")
+            gdf.to_csv(ais_path.with_suffix('.csv'), index=False)
         else:
-            print("AIS already downloaded for", pid)
+            print("No AIS data found for", pid)
+            
 
 def sample_shape(polygon, size, overestimate=2):
     min_x, min_y, max_x, max_y = polygon.bounds
@@ -219,7 +223,7 @@ def cut(line, distance):
             return [
                 LineString(coords[:i+1]),
                 LineString(coords[i:])]
-        if pd > distance:
+        elif pd > distance:
             cp = line.interpolate(distance)
             return [
                 LineString(coords[:i] + [(cp.x, cp.y, cp.z)]),
@@ -227,7 +231,7 @@ def cut(line, distance):
 
 def mae_ranking(pids, return_count=1, num_samples=50, vel=1):
     ## Buffer AIS linestrings to identify culprit
-    # Set return_count equal to 0 or None to rank all vessels in file
+    # Set return_count equal to 0 to rank all vessels in file
     # vel is a ratio from time to distance, used as to add a Z dimension to the AIS points for coincidence scoring
     coincidence_dir.mkdir(parents=True, exist_ok=True)
     
@@ -240,77 +244,79 @@ def mae_ranking(pids, return_count=1, num_samples=50, vel=1):
         if coincidence_path.exists():
             # Check to see if the work was done previously
             coincidence_df = gpd.read_file(coincidence_path)
-            print(f"Using previous MAE ranking for {pid}, return_count = {len(coincidence_df)}")
-        elif not vect_path.exists():
-            print("Could not find GeoJSON file for", pid)
-        elif not ais_path.exists():
-            print("Could not find AIS file for", pid)
-        else:
-            # Open the slick multipolygon
-            with open(vect_path) as f:
-                geom = json.load(f)
-            slick_shape = shape(geom).buffer(0)
-            sample_points = sample_shape(slick_shape, num_samples)
-            slick_samples_gs = gpd.GeoSeries([Point(*s, 0) for s in sample_points])
+            if return_count <= len(coincidence_df):
+                print(f"Using previous MAE ranking for {pid}")
+                continue
+        if not vect_path.exists():
+            print(f"Could not find GeoJSON file for {pid}")
+            continue
+        if not ais_path.exists():
+            print(f"Could not find AIS file for {pid}")
+            continue
 
-            # Open the AIS data for the same GRD
-            ais_df = gpd.read_file(ais_path).sort_values('timestamp')
+        # Open the slick multipolygon
+        with open(vect_path) as f:
+            geom = json.load(f)
+        slick_shape = shape(geom).buffer(0)
+        sample_points = sample_shape(slick_shape, num_samples)
+        slick_samples_gs = gpd.GeoSeries([Point(*s, 0) for s in sample_points])
 
-            # Add DeltaTime column
-            capture_timestamp = datetime.strptime(pid.split("_")[4], in_format).replace(tzinfo=timezone.utc)
-            ais_df["delta_time"] = pd.to_datetime(ais_df["timestamp"], infer_datetime_format=True)-capture_timestamp
-            ais_df["Z"] = ais_df["delta_time"].dt.total_seconds() / 3600 * vel / 111 # sec * hr/sec * km/hr * deg/km = deg
+        # Open the AIS data for the same GRD
+        ais_df = gpd.read_file(ais_path).sort_values('timestamp')
 
-            # Find any solitary AIS broadcasts and duplicate them, because linestrings can't exist with just one point
-            singletons = ~ais_df.duplicated(subset='ssvid', keep=False)
-            duped_df = ais_df.loc[np.repeat(ais_df.index.values,singletons+1)]
+        # Add DeltaTime column
+        capture_timestamp = datetime.strptime(pid.split("_")[4], in_format).replace(tzinfo=timezone.utc)
+        ais_df["delta_time"] = pd.to_datetime(ais_df["timestamp"], infer_datetime_format=True)-capture_timestamp
+        ais_df["Z"] = ais_df["delta_time"].dt.total_seconds() / 3600 * vel / 111 # sec * hr/sec * km/hr * deg/km = deg
 
-            # Zip the coordinates into a point object and convert to a GeoData Frame
-            geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
-            geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
+        # Find any solitary AIS broadcasts and duplicate them, because linestrings can't exist with just one point
+        singletons = ~ais_df.duplicated(subset='ssvid', keep=False)
+        duped_df = ais_df.loc[np.repeat(ais_df.index.values,singletons+1)]
 
-            # Create a new GDF that uses the SSVID to create linestrings
-            ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
-            ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
+        # Zip the coordinates into a point object and convert to a GeoData Frame
+        geometry = [Point(xyz) for xyz in zip(duped_df.lon, duped_df.lat, duped_df.Z)]
+        geo_df = gpd.GeoDataFrame(duped_df, geometry=geometry)
 
-            # Clip AIS tracks to data before image capture
-            ssvid_df["ais_before_t0"] = ssvid_df["geometry"]
-            for idx, vessel in ssvid_df["geometry"].iteritems():
-                for p0, p1 in zip(vessel.coords[:], vessel.coords[1:]):
-                    if p0[2] > 0: # No data points from before capture
-                        ssvid_df["ais_before_t0"].loc[idx] = None
-                        break
-                    if p1[2] > 0: # Found the two datapoints that sandwich the capture Z=0
-                        zero_intersection = find_xy(p0, p1, 0) # Find the XY where Z=0
-                        segments = cut(vessel, vessel.project(zero_intersection))
-                        ssvid_df["ais_before_t0"].loc[idx] = segments[0] if segments else None # Keep only negative segment                        
-                        break
+        # Create a new GDF that uses the SSVID to create linestrings
+        ssvid_df = geo_df.groupby(['ssvid'])['geometry'].apply(lambda x: LineString(x.tolist()))
+        ssvid_df = gpd.GeoDataFrame(ssvid_df, geometry='geometry')
 
-            # Calculate the Mean Absolute Error for each AIS Track, with early stopping if a candidate is looking bad.
-            return_count = return_count or len(ssvid_df)
-            ssvid_df['coinc_score'] = np.nan
-            minimum_errors = [np.inf]*return_count
-            for idx, vessel in tqdm(ssvid_df["ais_before_t0"].iteritems(), total=ssvid_df.shape[0]):
+        # Clip AIS tracks to data before image capture
+        ssvid_df["ais_before_t0"] = ssvid_df["geometry"]
+        for idx, vessel in ssvid_df["geometry"].iteritems():
+            for p0, p1 in zip(vessel.coords[:], vessel.coords[1:]):
+                if p0[2] > 0: # No data points from before capture
+                    ssvid_df["ais_before_t0"].loc[idx] = None
+                    break
+                if p1[2] > 0: # Found the two datapoints that sandwich the capture Z=0
+                    zero_intersection = find_xy(p0, p1, 0) # Find the XY where Z=0
+                    segments = cut(vessel, vessel.project(zero_intersection))
+                    ssvid_df["ais_before_t0"].loc[idx] = segments[0] if segments else None # Keep only negative segment                        
+                    break
 
-            # for idx, vessel in ssvid_df["ais_before_t0"].iteritems():
-                if vessel: # XXX Note that "if vessel else None" means that we are ignoring vessels that only broadcast AIS AFTER the image was captured (this is not ideal)
-                    error_threshold = minimum_errors[-1]
-                    error_sum = 0
-                    for sample in slick_samples_gs:
-                        error_sum += z_linestring_dist(sample, z_line_string=vessel)
-                        running_error = error_sum/num_samples
-                        if running_error > error_threshold: break
-                    else:
-                        minimum_errors.append(running_error)
-                        minimum_errors.sort()
-                        minimum_errors.pop()
-                        ssvid_df.at[idx,'coinc_score'] = running_error
+        # Calculate the Mean Absolute Error for each AIS Track, with early stopping if a candidate is looking bad.
+        return_count = return_count or len(ssvid_df)
+        ssvid_df['coinc_score'] = np.nan
+        minimum_errors = [np.inf]*return_count
+        for idx, vessel in tqdm(ssvid_df["ais_before_t0"].iteritems(), total=ssvid_df.shape[0]):
+            if vessel: # XXX Note that "if vessel else None" means that we are ignoring vessels that only broadcast AIS AFTER the image was captured (this is not ideal)
+                error_threshold = minimum_errors[-1]
+                error_sum = 0
+                for sample in slick_samples_gs:
+                    error_sum += z_linestring_dist(sample, z_line_string=vessel)
+                    running_error = error_sum/num_samples
+                    if running_error > error_threshold: break
+                else:
+                    minimum_errors.append(running_error)
+                    minimum_errors.sort()
+                    minimum_errors.pop()
+                    ssvid_df.at[idx,'coinc_score'] = running_error
 
-            # # Suggest Abstention
-            # abstain_threshold = 0.05 # This is a threshold value that determines how often we abstain from blaming a vessel in the picture (default = 0.01). Raise the value to make it more likely to blame a vessel.
-            # ssvid_df = ssvid_df.append(pd.Series({'coinc_score':abstain_threshold},name="^^^ Abstain Above^^^"))
-            rank = ssvid_df.sort_values('coinc_score')["coinc_score"].head(return_count)
-            rank.to_csv(coincidence_path)
+        # # Suggest Abstention
+        # abstain_threshold = 0.05 # This is a threshold value that determines how often we abstain from blaming a vessel in the picture (default = 0.01). Raise the value to make it more likely to blame a vessel.
+        # ssvid_df = ssvid_df.append(pd.Series({'coinc_score':abstain_threshold},name="^^^ Abstain Above^^^"))
+        rank = ssvid_df.sort_values('coinc_score')["coinc_score"].head(return_count)
+        rank.to_csv(coincidence_path)
 
 # %%
 

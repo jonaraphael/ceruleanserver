@@ -14,18 +14,26 @@ bulk_df = gpd.read_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/o
 
 # %%
 import geopandas as gpd
+from math import log
+from scipy.stats import norm
 import dateutil
+import numpy as np
+
 # ssvid = 224805000, 261001203, 273414140, 251826940
-ssvid = 251826940
-df = gpd.read_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/ssvid_split/{ssvid}.geojson")
+ssvid = 224805000
+df = gpd.read_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/all FPSO _ais/ssvid_split/{ssvid}.geojson")
 df["time_diff"] = df["timestamp"].map(dateutil.parser.parse).diff().map(lambda o: o.total_seconds())/60/60
-ax = df["time_diff"].hist(bins=20, log=True)
+log_diff = df["time_diff"].iloc[1:].map(log)
+bins = int(len(log_diff)/500)
+bins = 20
+height = max(np.histogram(log_diff, bins=bins)[0])
+ax =log_diff.hist(bins=bins)
 ax.set_title(f"AIS Gaps: MMSI {ssvid}")
 ax.set_xlabel("Hours Between Broadcasts")
 ax.set_ylabel("log(Count)")
-pass
-
-# %%
+x = np.linspace(min(log_diff), max(log_diff), 100)
+pdf = norm.pdf(x, *norm.fit(log_diff))
+ax.plot(x, pdf*height/max(pdf), label="Normal")
 
 # %%
 

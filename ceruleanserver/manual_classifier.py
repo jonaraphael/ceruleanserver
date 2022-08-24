@@ -28,9 +28,10 @@ from IPython.display import clear_output
 import pandas.io.clipboard as pyperclip
 from subprocess import call
 from ee_viewer import context_map
+from ais_funcs import sync_ais_files, mae_ranking
 
 processed_pids = []
-outpath = Path(path_config.LOCAL_DIR) / "temp" / "outputs"
+outpath = Path(path_config.LOCAL_DIR) / "temp/outputs"
 class_int_dict = {
     "n": 0, # Not Oil
     "v": 1, # Vessel
@@ -117,21 +118,29 @@ with session_scope(commit=True, database=db, echo=False) as sess:
         clear_output(wait=True)
         pyperclip.copy(grd.pid) # Store grd.pid in the copy/paste clipboard
 
-        raster_path = outpath / f"rasters/{grd.pid}.tiff"
-        vector_path = outpath / f"vectors/{grd.pid}.geojson"
+        raster_path = outpath / f"_rasters/{grd.pid}.tiff"
+        vector_path = outpath / f"_vectors/{grd.pid}.geojson"
+        ais_path = outpath / f"_ais/{grd.pid}.geojson"
         if use_qgis:
+            print("Waiting for raster and vector to download")
             while not (raster_path.exists() and vector_path.exists()):  # This crashes if we haven't downloaded the files! XXX Crashes if not on S3
                 pass
             call(['open', '-a' '/Applications/QGIS3.8.app', str(raster_path)])
             call(['open', '-a' '/Applications/QGIS3.8.app', str(vector_path)])
         elif use_ee:
+            print("Waiting for vector to download")
             while not vector_path.exists():  # This crashes if we haven't downloaded the file! XXX Crashes if not on S3
                 pass
-            found = context_map([grd.pid])
-            if not found: 
-                category = " "
+            context_map([grd.pid])
 
         while category.lower() not in class_int_dict:
+            if category.lower() == "ais":
+                sync_ais_files([grd.pid])
+                mae_ranking([grd.pid])
+                if use_qgis:
+                    call(['open', '-a' '/Applications/QGIS3.8.app', str(ais_path)])
+                elif use_ee:
+                    context_map([grd.pid])
             category = input("""Class: (V)essel, (F)ixed, (A)mbiguous, (N)one || Zoom: (I)nset, (O)utset || (Q)uit and save . . . . . . . .""")
         if category.lower() == "q":
             break
@@ -145,6 +154,8 @@ with open(f"{path_config.LOCAL_DIR}temp/outputs/manually_classified.csv", "a") a
     for proc in processed_pids:
         writer.writerow(proc + [date.today()])
 
-shutil.rmtree(outpath / "rasters", ignore_errors=True)
-shutil.rmtree(outpath / "vectors", ignore_errors=True)
+shutil.rmtree(outpath / "_rasters", ignore_errors=True)
+shutil.rmtree(outpath / "_vectors", ignore_errors=True)
+shutil.rmtree(outpath / "_ais", ignore_errors=True)
+shutil.rmtree(outpath / "_coincidence", ignore_errors=True)
 # %%

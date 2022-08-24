@@ -55,7 +55,7 @@ def context_map(pid_group, show_inference=True, show_ais=True, show_top_ranked=1
         except Exception as e:
             print(f"{attempt} missing for {pid} ")
             if exit_on_failure: raise e
-        print(pid)
+        print(pid) # Has to be up here, above the map, because we loop through an entire PID group before displaying the map
 
     Map.add_wms_layer(name='Vessel Density', shown=False, url="https://gmtds.maplarge.com/ogc/ais:density/wms?", layers = ['ais:density']) # https://maplarge-public.s3.us-east-1.amazonaws.com/UserGuides/GMTDS_Technical_Integration_Guide.pdf        
     Map.addLayer(name='Infrastructure', shown=False, ee_object=ee.FeatureCollection("projects/cerulean-338116/assets/GFW_Infra").map(partial(set_style, style_dict=infra_styles, class_column='label')).style(styleProperty='style_params')) # Syling parameters: https://developers.google.com/earth-engine/apidocs/ee-featurecollection-style
