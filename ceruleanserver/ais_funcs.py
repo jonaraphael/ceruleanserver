@@ -81,17 +81,17 @@ def bulk_download_ais(filename, tstamp, ssvids, number_of_days = 1, single_file 
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat))
 
     if len(df)>0:
-        makedirs("/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/", exist_ok=True)
+        makedirs(ais_dir, exist_ok=True)
         if add_max_dev:
             stdev = gdf.groupby('ssvid').std()
             gdf["max_dev"] = stdev[["lon", "lat"]].max(axis=1)
         
-        gdf.sort_values(by="timestamp", ascending=False).drop_duplicates(subset='ssvid').to_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/LAST_{filename}", driver="GeoJSON")
+        gdf.sort_values(by="timestamp", ascending=False).drop_duplicates(subset='ssvid').to_file(ais_dir/f"LAST_{filename}", driver="GeoJSON")
         if single_file:
-            gdf.to_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/{filename}", driver="GeoJSON")
+            gdf.to_file(ais_dir/f"{filename}", driver="GeoJSON")
         else:
             for ssvid in gdf['ssvid'].unique().tolist():
-                gdf[gdf['ssvid'] == ssvid].to_file(f"/Users/jonathanraphael/git/ceruleanserver/local/temp/outputs/ssvid_search_ais/split_files/{str(ssvid)}.geojson", driver="GeoJSON")
+                gdf[gdf['ssvid'] == ssvid].to_file(ais_dir/f"split_files/{str(ssvid)}.geojson", driver="GeoJSON")
     return gdf
 
 def plot_ais_over_time(bulk_df, ssvids=None):

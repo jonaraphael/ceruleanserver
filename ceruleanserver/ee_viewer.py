@@ -50,6 +50,7 @@ def context_map(pid_group, show_inference=True, show_ais=True, show_top_ranked=1
                     if len(coincidence_df) < show_top_ranked:
                         print(f"WARNING: {show_top_ranked} vessel tracks requested, but only {len(coincidence_df)} have been ranked.")
                     ais_input = ais_input[ais_input["ssvid"].isin(coincidence_df.head(show_top_ranked).index)]
+                    print(f"Top-1 MMSI: {coincidence_df.head(1).index[0]}")
                 Map.add_points_from_xy(layer_name=f'AIS-{pid}', data=ais_input, x="lon", y="lat", popup=["ssvid","timestamp", "shipname","flag","best_shiptype"], color_column="ssvid", icon_names=['circle'], icon_colors=['black']) # XXX WARNING! This depends on having an edited version of foliumap.py!!! Ask Jona for a copy
 
         except Exception as e:
