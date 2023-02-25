@@ -32,11 +32,11 @@ def ais_points_to_lines(ais: gpd.GeoDataFrame):
 
 
 def get_s1_tile_layer(collect_time: datetime, basename: str):
-    start_time = collect_time - timedelta(days=1)
-    end_time = collect_time + timedelta(days=1)
+    start_time = collect_time - timedelta(hours=1)
+    end_time = collect_time + timedelta(hours=1)
 
     s1_ic = ee.ImageCollection('COPERNICUS/S1_GRD')
-    s1_ic = s1_ic.filterDate(start_time.strftime('%Y-%m-%d'), end_time.strftime('%Y-%m-%d'))
+    s1_ic = s1_ic.filterDate(start_time, end_time)
     s1_ic = s1_ic.filter(ee.Filter.eq('instrumentMode', 'IW'))
 
     # check for VV/VH
