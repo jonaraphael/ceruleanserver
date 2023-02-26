@@ -161,7 +161,7 @@ class SlickMap:
         self.basename = self.df['basename'].iloc[ctr]
         self.ais = gpd.read_file(self.df['fname_ais'].iloc[ctr])
         self.slick = gpd.read_file(self.df['fname_slick'].iloc[ctr])
-        self.ssvid_truth = self.df['ssvid_truth'].iloc[ctr]
+        self.ssvid_truths = self.df['ssvid_truth'].iloc[ctr].split(',')
 
         # extract time of collection
         start_time = self.basename.split('_')[4]
@@ -171,8 +171,8 @@ class SlickMap:
         # convert ais points to lines
         self.ais_lines = ais_points_to_lines(self.ais)
 
-        # get truth line
-        self.truth_line = self.ais_lines[self.ais_lines['ssvid'] == self.ssvid_truth]
+        # get AIS lines that contain truth SSVIDs
+        self.truth_lines = self.ais_lines[self.ais_lines['ssvid'].isin(self.ssvid_truths)]
 
         # pull S1 tile layer around this collection
         s1_url, s1_footprint = get_s1_tile_layer(self.collect_time, self.basename)
@@ -182,7 +182,7 @@ class SlickMap:
         # update vector layers
         self.footprint_layer.data = s1_footprint
         self.ais_layer.data = json.loads(self.ais_lines.to_json())
-        self.truth_layer.data = json.loads(self.truth_line.to_json())
+        self.truth_layer.data = json.loads(self.truth_lines.to_json())
         self.slick_layer.data = json.loads(self.slick.to_json())
 
         # update date display
@@ -193,7 +193,7 @@ class SlickMap:
 
     def _build_data_controls(self):
         def next_sample(b):
-            if self.ctr <= len(self.df):
+            if self.ctr < len(self.df):
                 self.ctr += 1
                 self.data_progress.value = self.ctr + 1
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
