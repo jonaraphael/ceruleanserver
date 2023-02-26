@@ -21,6 +21,7 @@ from utils import ais_points_to_lines, get_s1_tile_layer
 DATA_DIR = '/home/k3blu3/datasets/cerulean'
 AIS_DIR = os.path.join(DATA_DIR, '19_ais')
 SLICK_DIR = os.path.join(DATA_DIR, '19_vectors')
+TRUTH_FILE = os.path.join(DATA_DIR, 'slick_truth_year1.csv')
 
 class SlickMap:
     def __init__(self):
@@ -83,19 +84,24 @@ class SlickMap:
                 "weight": 1,
                 "opacity": 1,
             },
-            hover_style={
+            style_callback=random_color
+        )
+
+        self.truth_layer = ipyl.GeoJSON(
+            name="Truth",
+            style={
                 "color": "white",
+                "opacity": 1,
                 "dashArray": "0",
-                "fillOpacity": 0.5,
+                "fillOpacity": 1,
                 "weight": 2
             },
-            style_callback=random_color
         )
         
         self.slick_layer = ipyl.GeoJSON(
             name="Slick",
             style={
-                "color": "white",
+                "color": "red",
                 "fillColor": "black",
                 "opacity": 0.8,
                 "fillOpacity": 0.2,
@@ -121,10 +127,11 @@ class SlickMap:
 
         self.s1_layer = ipyl.TileLayer(nowrap=True)
 
+        self.map.add_layer(self.s1_layer)
         self.map.add_layer(self.footprint_layer)
         self.map.add_layer(self.ais_layer)
+        self.map.add_layer(self.truth_layer)
         self.map.add_layer(self.slick_layer)
-        self.map.add_layer(self.s1_layer)
 
     def _load_dataset(self):
         ais_files = glob(os.path.join(AIS_DIR, '*.geojson'))
@@ -137,7 +144,15 @@ class SlickMap:
         slick['basename'] = slick['fname'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
 
         df = ais.merge(slick, on='basename', how='inner', suffixes=('_ais', '_slick'))
-        df = df[['basename', 'fname_ais', 'fname_slick']]
+
+        # load in truth
+        truth = pd.read_csv(os.path.join(DATA_DIR, TRUTH_FILE))
+        truth = truth.rename(columns={'PID': 'basename', 'HITL MMSI': 'ssvid_truth'})
+        truth = truth.fillna('DARK') # any NaN values are assumed to be DARK
+
+        # merge truth into dataset
+        df = df.merge(truth, on='basename', how='inner')
+        df = df[['basename', 'fname_ais', 'fname_slick', 'ssvid_truth']]
 
         self.df = df
         self.ctr = 0 # start at the beginning of the dataset
@@ -146,6 +161,7 @@ class SlickMap:
         self.basename = self.df['basename'].iloc[ctr]
         self.ais = gpd.read_file(self.df['fname_ais'].iloc[ctr])
         self.slick = gpd.read_file(self.df['fname_slick'].iloc[ctr])
+        self.ssvid_truth = self.df['ssvid_truth'].iloc[ctr]
 
         # extract time of collection
         start_time = self.basename.split('_')[4]
@@ -155,15 +171,19 @@ class SlickMap:
         # convert ais points to lines
         self.ais_lines = ais_points_to_lines(self.ais)
 
+        # get truth line
+        self.truth_line = self.ais_lines[self.ais_lines['ssvid'] == self.ssvid_truth]
+
         # pull S1 tile layer around this collection
         s1_url, s1_footprint = get_s1_tile_layer(self.collect_time, self.basename)
         self.s1_layer.url = s1_url
         self.s1_layer.redraw()
 
         # update vector layers
-        self.ais_layer.data = json.loads(self.ais_lines.to_json())
-        self.slick_layer.data = json.loads(self.slick.to_json())
         self.footprint_layer.data = s1_footprint
+        self.ais_layer.data = json.loads(self.ais_lines.to_json())
+        self.truth_layer.data = json.loads(self.truth_line.to_json())
+        self.slick_layer.data = json.loads(self.slick.to_json())
 
         # update date display
         self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
