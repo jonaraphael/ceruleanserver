@@ -9,13 +9,17 @@ import os
 import random
 
 import geopandas as gpd
+import movingpandas as mpd
+import numpy as np
 import ipyleaflet as ipyl
 import ipywidgets as ipyw
 import matplotlib.colors
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from utils import ais_points_to_lines, get_s1_tile_layer
+from utils import (ais_points_to_lines,
+                   ais_points_to_trajectories,
+                   get_s1_tile_layer)
 
 # define dataset directories
 DATA_DIR = '/home/k3blu3/datasets/cerulean'
@@ -162,18 +166,34 @@ class SlickMap:
         self.ais = gpd.read_file(self.df['fname_ais'].iloc[ctr])
         self.slick = gpd.read_file(self.df['fname_slick'].iloc[ctr])
         self.ssvid_truths = self.df['ssvid_truth'].iloc[ctr].split(',')
+        self.ssvid_truths = [s.strip() for s in self.ssvid_truths]
 
         # extract time of collection
         start_time = self.basename.split('_')[4]
         start_time = datetime.strptime(start_time, '%Y%m%dT%H%M%S')
         self.collect_time = start_time
 
-        # convert ais points to lines
-        self.ais_lines = ais_points_to_lines(self.ais)
+        # create a time vector that we will interpolate the AIS tracks on
+        self.time_vec = pd.date_range(
+            self.collect_time - timedelta(hours=4),
+            self.collect_time,
+            periods=20
+        )
 
-        # get AIS lines that contain truth SSVIDs
-        self.truth_lines = self.ais_lines[self.ais_lines['ssvid'].isin(self.ssvid_truths)]
+        # get the best UTM zone for this sample, and reproject
+        self.utm_zone = self.ais.estimate_utm_crs()
+        self.ais = self.ais.to_crs(self.utm_zone)
+        self.slick = self.slick.to_crs(self.utm_zone)
 
+        # get trajectories from AIS data
+        self.ais_trajectories = ais_points_to_trajectories(self.ais, self.time_vec)
+
+        # get interpolated trajectories as gdf
+        # this is what we will use to plot the AIS tracks
+        # also get the truth trajectories if they exist
+        self.ais_gdf = self.ais_trajectories.to_traj_gdf()
+        self.truth_gdf = self.ais_gdf[self.ais_gdf['traj_id'].isin(self.ssvid_truths)]
+    
         # pull S1 tile layer around this collection
         s1_url, s1_footprint = get_s1_tile_layer(self.collect_time, self.basename)
         self.s1_layer.url = s1_url
@@ -181,15 +201,15 @@ class SlickMap:
 
         # update vector layers
         self.footprint_layer.data = s1_footprint
-        self.ais_layer.data = json.loads(self.ais_lines.to_json())
-        self.truth_layer.data = json.loads(self.truth_lines.to_json())
-        self.slick_layer.data = json.loads(self.slick.to_json())
+        self.ais_layer.data = json.loads(self.ais_gdf.to_crs('EPSG:4326').geometry.to_json())
+        self.truth_layer.data = json.loads(self.truth_gdf.to_crs('EPSG:4326').geometry.to_json())
+        self.slick_layer.data = json.loads(self.slick.to_crs('EPSG:4326').geometry.to_json())
 
         # update date display
         self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
 
         # center map on the slick
-        self.map.center = self.slick.dissolve().centroid[0].coords[0][::-1]
+        self.map.center = self.slick.dissolve().centroid.to_crs('EPSG:4326').iloc[0].coords[0][::-1]
 
     def _build_data_controls(self):
         def next_sample(b):
@@ -206,13 +226,19 @@ class SlickMap:
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
                 self._load_sample(self.ctr)
 
+        def random_sample(b):
+            self.ctr = np.random.randint(0, len(self.df) - 1)
+            self.data_progress.value = self.ctr + 1
+            self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
+            self._load_sample(self.ctr)
+
         self.next_button = ipyw.Button(
             description='',
             disabled=False,
             button_style='info',
             tooltip='Go to the next sample',
             icon='arrow-right',
-            layout=ipyw.Layout(width='80px')
+            layout=ipyw.Layout(width='50px')
         )
         self.next_button.on_click(next_sample)
 
@@ -222,9 +248,19 @@ class SlickMap:
             button_style='info',
             tooltip='Go to the previous sample',
             icon='arrow-left',
-            layout=ipyw.Layout(width='80px')
+            layout=ipyw.Layout(width='50px')
         )
         self.prev_button.on_click(prev_sample)
+
+        self.random_button = ipyw.Button(
+            description='',
+            disabled=False,
+            button_style='info',
+            tooltip='Go to a random sample',
+            icon='random',
+            layout=ipyw.Layout(width='50px')
+        )
+        self.random_button.on_click(random_sample)
 
         self.data_progress = ipyw.IntProgress(
             value=self.ctr + 1,
@@ -242,6 +278,7 @@ class SlickMap:
             [
                 ipyw.HBox(
                     [
+                        self.random_button,
                         self.prev_button,
                         self.next_button
                     ],
