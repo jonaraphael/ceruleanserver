@@ -9,6 +9,7 @@ import os
 import random
 
 import geopandas as gpd
+from IPython.display import display, clear_output
 import movingpandas as mpd
 import numpy as np
 import ipyleaflet as ipyl
@@ -16,6 +17,7 @@ import ipywidgets as ipyw
 import matplotlib.colors
 import matplotlib.pyplot as plt
 import pandas as pd
+from tabulate import tabulate
 
 from utils import (ais_points_to_lines,
                    ais_points_to_trajectories,
@@ -216,6 +218,28 @@ class SlickMap:
 
         # update date display
         self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
+        
+        # update truth dataframe display
+        truth_df = pd.DataFrame({'truth_id': self.ssvid_truths})
+        with self.truth_df_display as disp:
+            clear_output()
+            display("Truth IDs")
+            display(truth_df)
+
+        # update model dataframe display
+        disp_df = self.slick_ais.copy()
+        if 'overlap' in disp_df:
+            disp_df = disp_df[['traj_id', 'overlap']]
+            disp_df["confidence"] = (disp_df["overlap"] * 100).astype(np.uint8)
+            disp_df = disp_df.drop(columns=["overlap"]).reset_index(drop=True)
+            with self.model_df_display as disp:
+                clear_output()
+                display("Model Predictions")
+                display(disp_df.head(5))
+        else:
+            with self.model_df_display as disp:
+                clear_output()
+                print("No match found")
 
         # center map on the slick
         self.map.center = self.slick.dissolve().centroid.to_crs('EPSG:4326').iloc[0].coords[0][::-1]
@@ -282,6 +306,8 @@ class SlickMap:
         )
 
         self.date_display = ipyw.HTML()
+        self.truth_df_display = ipyw.Output(layout={'border': '1px solid black'})
+        self.model_df_display = ipyw.Output(layout={'border': '1px solid black'})
 
         self.data_pane = ipyw.VBox(
             [
@@ -293,7 +319,9 @@ class SlickMap:
                     ],
                 ),
                 self.data_progress,
-                self.date_display
+                self.date_display,
+                self.truth_df_display,
+                self.model_df_display
             ]
         )
         self.data_pane.layout = ipyw.Layout(align_items='flex-end')
