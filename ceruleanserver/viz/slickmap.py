@@ -19,6 +19,7 @@ import pandas as pd
 
 from utils import (ais_points_to_lines,
                    ais_points_to_trajectories,
+                   associate_slicks_to_ais,
                    get_s1_tile_layer)
 
 # define dataset directories
@@ -38,6 +39,8 @@ class SlickMap:
         self._load_dataset()
 
         self._build_data_controls()
+
+        self._build_layer_controls()
 
     def _create_map(self):
         map_kwargs = dict()
@@ -63,7 +66,7 @@ class SlickMap:
             width=80,
         )
 
-        logo_wc = ipyl.WidgetControl(widget=logo, position='bottomleft')
+        logo_wc = ipyl.WidgetControl(widget=logo, position='topleft')
         self.map.add_control(logo_wc)
 
     def _create_vector_layers(self):
@@ -188,12 +191,18 @@ class SlickMap:
         # get trajectories from AIS data
         self.ais_trajectories = ais_points_to_trajectories(self.ais, self.time_vec)
 
+        # associate slick to AIS trajectories
+        self.slick_ais = associate_slicks_to_ais(self.ais_trajectories, self.slick)
+
         # get interpolated trajectories as gdf
         # this is what we will use to plot the AIS tracks
         # also get the truth trajectories if they exist
         self.ais_gdf = self.ais_trajectories.to_traj_gdf()
         self.truth_gdf = self.ais_gdf[self.ais_gdf['traj_id'].isin(self.ssvid_truths)]
-    
+
+        self.ais_gdf_buf = self.ais_gdf.copy()
+        self.ais_gdf_buf.geometry = self.ais_gdf_buf.geometry.buffer(2000)
+
         # pull S1 tile layer around this collection
         s1_url, s1_footprint = get_s1_tile_layer(self.collect_time, self.basename)
         self.s1_layer.url = s1_url
@@ -201,7 +210,7 @@ class SlickMap:
 
         # update vector layers
         self.footprint_layer.data = s1_footprint
-        self.ais_layer.data = json.loads(self.ais_gdf.to_crs('EPSG:4326').geometry.to_json())
+        self.ais_layer.data = json.loads(self.ais_gdf_buf.to_crs('EPSG:4326').geometry.to_json())
         self.truth_layer.data = json.loads(self.truth_gdf.to_crs('EPSG:4326').geometry.to_json())
         self.slick_layer.data = json.loads(self.slick.to_crs('EPSG:4326').geometry.to_json())
 
@@ -297,13 +306,15 @@ class SlickMap:
         self.map.add_control(self.data_control)
         self._load_sample(self.ctr)
 
+    def _build_layer_controls(self):
+        self.layer_control = ipyl.LayersControl(position='topright')
+        self.map.add_control(self.layer_control)
 
+        self.full_screen_control = ipyl.FullScreenControl()
+        self.map.add_control(self.full_screen_control)
 
-
-
-
-
-
+        self.scale_control = ipyl.ScaleControl(position='bottomleft')
+        self.map.add_control(self.scale_control)
         
 
 

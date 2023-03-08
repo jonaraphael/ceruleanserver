@@ -13,6 +13,32 @@ import ee
 ee.Initialize()
 
 
+def associate_slicks_to_ais(ais: mpd.TrajectoryCollection, slick: gpd.GeoDataFrame):
+    """
+    Associate oil slicks to AIS trajectories
+    """
+    # buffer the AIS trajectories by 2km on each side
+    ais_buf = ais.to_traj_gdf().copy()
+    ais_buf.geometry = ais_buf.geometry.buffer(2000)
+
+    # find the slicks that intersect with the AIS trajectories
+    slick_ais = gpd.sjoin(ais_buf, slick, how="inner", predicate="intersects")
+    
+    # if there are no matches, there are no associations to report
+    if slick_ais.empty:
+        return slick_ais
+
+    # for every match, calculate the percent of the slick that is within the AIS trajectory
+    slick_ais["overlap"] = slick_ais.apply(
+        lambda row: slick.geometry.intersection(row.geometry).area / slick.geometry.area,
+        axis=1
+    )
+
+    # sort by overlap
+    slick_ais = slick_ais.sort_values(by="overlap", ascending=False)
+    return slick_ais
+
+
 def ais_points_to_lines(ais: gpd.GeoDataFrame):
     """
     Convert a set of AIS points into lines, grouped by ssvid
