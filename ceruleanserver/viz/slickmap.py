@@ -21,7 +21,7 @@ from tabulate import tabulate
 
 from utils import (ais_points_to_lines,
                    ais_points_to_trajectories,
-                   associate_slicks_to_ais,
+                   associate_by_overlap,
                    get_s1_tile_layer)
 
 # define dataset directories
@@ -156,12 +156,18 @@ class SlickMap:
 
         # load in truth
         truth = pd.read_csv(os.path.join(DATA_DIR, TRUTH_FILE))
-        truth = truth.rename(columns={'PID': 'basename', 'HITL MMSI': 'ssvid_truth'})
-        truth = truth.fillna('DARK') # any NaN values are assumed to be DARK
+        truth = truth.rename(columns=
+            {
+                'PID': 'basename', 
+                'HITL MMSI': 'ssvid_truth',
+                'Algo MMSI': 'ssvid_algo'
+            }
+        )
+        truth = truth[truth['ssvid_truth'].notna()]
 
         # merge truth into dataset
         df = df.merge(truth, on='basename', how='inner')
-        df = df[['basename', 'fname_ais', 'fname_slick', 'ssvid_truth']]
+        df = df[['basename', 'fname_ais', 'fname_slick', 'ssvid_truth', 'ssvid_algo']]
 
         self.df = df
         self.ctr = 0 # start at the beginning of the dataset
@@ -172,6 +178,7 @@ class SlickMap:
         self.slick = gpd.read_file(self.df['fname_slick'].iloc[ctr])
         self.ssvid_truths = self.df['ssvid_truth'].iloc[ctr].split(',')
         self.ssvid_truths = [s.strip() for s in self.ssvid_truths]
+        self.model_pred = [self.df['ssvid_algo'].iloc[ctr]]*len(self.ssvid_truths)
 
         # extract time of collection
         start_time = self.basename.split('_')[4]
@@ -194,7 +201,7 @@ class SlickMap:
         self.ais_trajectories = ais_points_to_trajectories(self.ais, self.time_vec)
 
         # associate slick to AIS trajectories
-        self.slick_ais = associate_slicks_to_ais(self.ais_trajectories, self.slick)
+        self.slick_ais = associate_by_overlap(self.ais_trajectories, self.slick)
 
         # get interpolated trajectories as gdf
         # this is what we will use to plot the AIS tracks
@@ -217,10 +224,16 @@ class SlickMap:
         self.slick_layer.data = json.loads(self.slick.to_crs('EPSG:4326').geometry.to_json())
 
         # update date display
-        self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
+        #self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
+        self.date_display.value = self.df.iloc[ctr]['basename']
         
         # update truth dataframe display
-        truth_df = pd.DataFrame({'truth_id': self.ssvid_truths})
+        truth_df = pd.DataFrame(
+            {
+                'truth_id': self.ssvid_truths, 
+                'model_pred': self.model_pred
+            }
+        )
         with self.truth_df_display as disp:
             clear_output()
             display("Truth IDs")
@@ -230,8 +243,7 @@ class SlickMap:
         disp_df = self.slick_ais.copy()
         if 'overlap' in disp_df:
             disp_df = disp_df[['traj_id', 'overlap']]
-            disp_df["confidence"] = (disp_df["overlap"] * 100).astype(np.uint8)
-            disp_df = disp_df.drop(columns=["overlap"]).reset_index(drop=True)
+            disp_df = disp_df.reset_index(drop=True)
             with self.model_df_display as disp:
                 clear_output()
                 display("Model Predictions")
@@ -264,6 +276,17 @@ class SlickMap:
             self.data_progress.value = self.ctr + 1
             self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
             self._load_sample(self.ctr)
+
+        def update_text(change):
+            this_entry = self.df[self.df.basename == change['new']]
+            if len(this_entry) == 0:
+                self.date_display.value = change['old']
+            else:
+                self.ctr = this_entry.index[0]
+                self.date_display.value = change['new']
+                self.data_progress.value = self.ctr + 1
+                self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
+                self._load_sample(self.ctr)
 
         self.next_button = ipyw.Button(
             description='',
@@ -305,9 +328,18 @@ class SlickMap:
             layout=ipyw.Layout(width='200px')
         )
 
-        self.date_display = ipyw.HTML()
+        self.date_display = ipyw.Text(layout=ipyw.Layout(width='550px'))
         self.truth_df_display = ipyw.Output(layout={'border': '1px solid black'})
         self.model_df_display = ipyw.Output(layout={'border': '1px solid black'})
+
+        self.date_display.observe(update_text, names='value')
+
+        self.date_control = ipyl.WidgetControl(
+            widget=self.date_display,
+            position='bottomright'
+        )
+
+        self.map.add_control(self.date_control)
 
         self.data_pane = ipyw.VBox(
             [
@@ -319,7 +351,6 @@ class SlickMap:
                     ],
                 ),
                 self.data_progress,
-                self.date_display,
                 self.truth_df_display,
                 self.model_df_display
             ]

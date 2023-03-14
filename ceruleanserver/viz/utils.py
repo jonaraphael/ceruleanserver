@@ -14,7 +14,7 @@ import ee
 ee.Initialize()
 
 
-def associate_slicks_to_ais(ais: mpd.TrajectoryCollection, slick: gpd.GeoDataFrame):
+def associate_by_overlap(ais: mpd.TrajectoryCollection, slick: gpd.GeoDataFrame):
     """
     Associate oil slicks to AIS trajectories
     """
@@ -38,6 +38,52 @@ def associate_slicks_to_ais(ais: mpd.TrajectoryCollection, slick: gpd.GeoDataFra
     # sort by overlap
     slick_ais = slick_ais.sort_values(by="overlap", ascending=False)
     return slick_ais
+
+
+def sample_points(gdf: gpd.GeoDataFrame, num_samples: int = 50):
+    """
+    Randomly sample points from a GeoDataFrame
+    """
+    x_min, y_min, x_max, y_max = gdf.total_bounds
+
+    points = list()
+    while len(points) < num_samples:
+        x = np.random.uniform(x_min, x_max)
+        y = np.random.uniform(y_min, y_max)
+
+        point = shapely.geometry.Point(x, y)
+        if point.within(gdf.unary_union):
+            points.append(point)
+
+    points = gpd.GeoSeries(points, crs=gdf.crs)
+
+    return points
+
+
+def associate_by_distance(ais: mpd.TrajectoryCollection, slick: gpd.GeoDataFrame, num_samples: int = 50):
+    """
+    This is a slightly varied implementation of Jona's algorithm
+
+    Randomly sample points within the slick
+    For each point, find the AIS trajectory with the lowest MAE by distance
+    """
+    # randomly sample points in the slick
+    points = sample_points(slick, num_samples)
+
+    # for every trajectory, compute the mean distance to the sampled points
+    mean_distances = list()
+    for trajectory in ais:
+        # trajectory.distance() calculates the shortest distance from the trajectory to each point
+        mean_distance = trajectory.distance(points).mean()
+        mean_distances.append(mean_distance)
+
+    # add to trajectory dataframe
+    traj_gdf = ais.to_traj_gdf()
+    traj_gdf['mean_distance'] = mean_distances
+
+    # sort by mean distance
+    traj_gdf = traj_gdf.sort_values(by="mean_distance", ascending=True)
+    return traj_gdf
 
 
 def ais_points_to_lines(ais: gpd.GeoDataFrame):
