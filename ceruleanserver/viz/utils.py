@@ -4,11 +4,14 @@ Utilities and helper functions for the oil slick Leaflet map
 
 from datetime import datetime, timedelta
 
+import centerline.geometry
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
 import pandas as pd
+import scipy.interpolate
 import shapely.geometry
+import shapely.ops
 
 import ee
 ee.Initialize()
@@ -114,12 +117,14 @@ def ais_points_to_trajectories(ais: gpd.GeoDataFrame, time_vec: pd.DatetimeIndex
     ais_trajectories = list()
     for ssvid, group in ais.groupby('ssvid'):
         if len(group) > 1: # ignore single points
+            # build trajectory 
             traj = mpd.Trajectory(
                 df=group,
                 traj_id=ssvid,
                 t="timestamp"
             )
 
+            # interpolate/extrapolate to times in time_vec
             times = list()
             positions = list()
             for t in time_vec:
@@ -127,6 +132,7 @@ def ais_points_to_trajectories(ais: gpd.GeoDataFrame, time_vec: pd.DatetimeIndex
                 times.append(t)
                 positions.append(pos)
 
+            # store as trajectory
             interpolated_traj = mpd.Trajectory(
                 df=gpd.GeoDataFrame(
                     {
@@ -142,6 +148,136 @@ def ais_points_to_trajectories(ais: gpd.GeoDataFrame, time_vec: pd.DatetimeIndex
             ais_trajectories.append(interpolated_traj)
 
     return mpd.TrajectoryCollection(ais_trajectories)
+
+
+def slicks_to_curves(slicks: gpd.GeoDataFrame, 
+                     buf_size: int = 2000, 
+                     interp_dist: int = 200,
+                     smoothing_factor: float = 1e9):
+    """
+    From a set of oil slick detections, estimate curves that go through the detections
+    This process transforms a set of slick detections into LineStrings for each detection
+    """
+    # clean up the slick detections by dilation followed by erosion
+    # this process can merge some polygons but not others, depending on proximity
+    slicks_clean = slicks.copy()
+    slicks_clean.geometry = slicks_clean.geometry.buffer(buf_size).buffer(-buf_size)
+
+    # split slicks into individual polygons
+    slicks_clean = slicks_clean.explode(ignore_index=True, index_parts=False)
+
+    # find a centerline through detections
+    slick_curves = list()
+    for idx, row in slicks_clean.iterrows():
+        # create centerline -> MultiLineString
+        cl = centerline.geometry.Centerline(row.geometry, interpolation_distance=interp_dist)
+
+        # grab coordinates from centerline
+        x = list()
+        y = list()
+        if type(cl.geometry) == shapely.geometry.MultiLineString:
+            # iterate through each linestring
+            for geom in cl.geometry.geoms:
+                x.extend(geom.coords.xy[0])
+                y.extend(geom.coords.xy[1])
+        else:
+            x.extend(cl.geometry.coords.xy[0])
+            y.extend(cl.geometry.coords.xy[1])
+
+        # sort coordinates in both X and Y directions
+        coords = [(xc, yc) for xc, yc in zip(x, y)]
+        coords_sort_x = sorted(coords, key=lambda c: c[0])
+        coords_sort_y = sorted(coords, key=lambda c: c[1])
+
+        # remove coordinate duplicates, preserving sorted order
+        coords_seen_x = set()
+        coords_unique_x = list()
+        for c in coords_sort_x:
+            if c not in coords_seen_x:
+                coords_unique_x.append(c)
+                coords_seen_x.add(c)
+        
+        coords_seen_y = set()
+        coords_unique_y = list()
+        for c in coords_sort_y:
+            if c not in coords_seen_y:
+                coords_unique_y.append(c)
+                coords_seen_y.add(c)
+        
+        # grab x and y coordinates for spline fit
+        x_fit_sort_x = [c[0] for c in coords_unique_x]
+        x_fit_sort_y = [c[0] for c in coords_unique_y]
+        y_fit_sort_x = [c[1] for c in coords_unique_x]
+        y_fit_sort_y = [c[1] for c in coords_unique_y]
+
+        # fit a B-spline to the centerline
+        tck_sort_x, fp_sort_x, _, _ = scipy.interpolate.splrep(
+            x_fit_sort_x, 
+            y_fit_sort_x, 
+            k=3, 
+            s=smoothing_factor, 
+            full_output=True
+        )
+        tck_sort_y, fp_sort_y, _, _ = scipy.interpolate.splrep(
+            y_fit_sort_y,
+            x_fit_sort_y,
+            k=3, 
+            s=smoothing_factor, 
+            full_output=True
+        )
+
+        # choose the spline that has the lowest fit error
+        if fp_sort_x <= fp_sort_y:
+            tck = tck_sort_x
+            x_fit = x_fit_sort_x
+            y_fit = y_fit_sort_x
+            
+            num_points = max(round((x_fit[-1] - x_fit[0]) / 100), 5)
+            x_new = np.linspace(x_fit[0], x_fit[-1], 10)
+            y_new = scipy.interpolate.BSpline(*tck)(x_new)
+        else:
+            tck = tck_sort_y
+            x_fit = x_fit_sort_y
+            y_fit = y_fit_sort_y
+            
+            num_points = max(round((y_fit[-1] - y_fit[0]) / 100), 5)
+            y_new = np.linspace(y_fit[0], y_fit[-1], num_points)
+            x_new = scipy.interpolate.BSpline(*tck)(y_new)
+
+        # store as LineString
+        curve = shapely.geometry.LineString(zip(x_new, y_new))
+        slick_curves.append(curve)
+
+    slick_curves = gpd.GeoDataFrame(geometry=slick_curves, crs=slicks_clean.crs)
+    return slick_curves
+
+
+def buffer_trajectories(ais: mpd.TrajectoryCollection, buf_vec: np.ndarray):
+    """
+    Build conic buffers around each trajectory
+    Buffer is narrowest at the start and widest at the end
+    """
+    ais_buf = list()
+    for traj in ais:
+        # grab points
+        points = traj.to_point_gdf()
+        points = points.sort_values(by="timestamp", ascending=False)
+
+        # create buffered circles at points
+        ps = list()
+        for idx, buffer in enumerate(buf_vec):
+            ps.append(points.iloc[idx].geometry.buffer(buffer))
+        
+        # create convex hulls from circles
+        n = range(len(ps) - 1)
+        convex_hulls = [shapely.geometry.MultiPolygon([ps[i], ps[i+1]]).convex_hull for i in n]
+
+        # create polygon from hulls
+        poly = shapely.ops.unary_union(convex_hulls)
+        ais_buf.append(poly)
+
+    ais_buf = gpd.GeoDataFrame(geometry=ais_buf, crs=traj.crs)
+    return ais_buf
 
 
 def get_s1_tile_layer(collect_time: datetime, basename: str):

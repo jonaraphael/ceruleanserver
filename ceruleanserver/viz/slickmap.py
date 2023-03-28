@@ -22,13 +22,25 @@ from tabulate import tabulate
 from utils import (ais_points_to_lines,
                    ais_points_to_trajectories,
                    associate_by_overlap,
-                   get_s1_tile_layer)
+                   buffer_trajectories,
+                   get_s1_tile_layer,
+                   slicks_to_curves)
 
 # define dataset directories
 DATA_DIR = '/home/k3blu3/datasets/cerulean'
 AIS_DIR = os.path.join(DATA_DIR, '19_ais')
 SLICK_DIR = os.path.join(DATA_DIR, '19_vectors')
 TRUTH_FILE = os.path.join(DATA_DIR, 'slick_truth_year1.csv')
+
+# define temporal parameters for trajectory estimation
+HOURS_BEFORE = 12
+NUM_TIMESTEPS = 12
+
+# define buffering parameters for trajectories
+BUF_START = 200 # in meters
+BUF_END = 15000 # in meters
+BUF_VEC = np.linspace(BUF_START, BUF_END, NUM_TIMESTEPS)
+
 
 class SlickMap:
     def __init__(self):
@@ -86,7 +98,7 @@ class SlickMap:
                 "opacity": 0.8,
                 "dashArray": "9",
                 "fillOpacity": 0.1,
-                "weight": 1.5,
+                "weight": 1,
             },
             point_style={
                 "radius": 4,
@@ -120,7 +132,16 @@ class SlickMap:
                 "fillColor": "red",
                 "fillOpacity": 0.8,
                 "opacity": 1,
-                "weight": 2
+                "weight": 1
+            }
+        )
+
+        self.slick_curve_layer = ipyl.GeoJSON(
+            name="Slick Curve",
+            style={
+                "color": "#fc9403",
+                "opacity": 1.0,
+                "weight": 1
             }
         )
 
@@ -128,7 +149,7 @@ class SlickMap:
             name="Footprint",
             style={
                 "color": "yellow",
-                "opacity": 0.8,
+                "opacity": 0.7,
                 "fillOpacity": 0,
                 "weight": 1
             }
@@ -141,6 +162,7 @@ class SlickMap:
         self.map.add_layer(self.ais_layer)
         self.map.add_layer(self.truth_layer)
         self.map.add_layer(self.slick_layer)
+        self.map.add_layer(self.slick_curve_layer)
 
     def _load_dataset(self):
         ais_files = glob(os.path.join(AIS_DIR, '*.geojson'))
@@ -187,9 +209,9 @@ class SlickMap:
 
         # create a time vector that we will interpolate the AIS tracks on
         self.time_vec = pd.date_range(
-            self.collect_time - timedelta(hours=4),
+            self.collect_time - timedelta(hours=HOURS_BEFORE),
             self.collect_time,
-            periods=20
+            periods=NUM_TIMESTEPS
         )
 
         # get the best UTM zone for this sample, and reproject
@@ -200,6 +222,12 @@ class SlickMap:
         # get trajectories from AIS data
         self.ais_trajectories = ais_points_to_trajectories(self.ais, self.time_vec)
 
+        # get curves from slick data
+        self.slick_curves = slicks_to_curves(self.slick)
+
+        # build conic buffers around the trajectories
+        self.ais_gdf_buf = buffer_trajectories(self.ais_trajectories, BUF_VEC)
+
         # associate slick to AIS trajectories
         self.slick_ais = associate_by_overlap(self.ais_trajectories, self.slick)
 
@@ -208,9 +236,6 @@ class SlickMap:
         # also get the truth trajectories if they exist
         self.ais_gdf = self.ais_trajectories.to_traj_gdf()
         self.truth_gdf = self.ais_gdf[self.ais_gdf['traj_id'].isin(self.ssvid_truths)]
-
-        self.ais_gdf_buf = self.ais_gdf.copy()
-        self.ais_gdf_buf.geometry = self.ais_gdf_buf.geometry.buffer(2000)
 
         # pull S1 tile layer around this collection
         s1_url, s1_footprint = get_s1_tile_layer(self.collect_time, self.basename)
@@ -222,9 +247,9 @@ class SlickMap:
         self.ais_layer.data = json.loads(self.ais_gdf_buf.to_crs('EPSG:4326').geometry.to_json())
         self.truth_layer.data = json.loads(self.truth_gdf.to_crs('EPSG:4326').geometry.to_json())
         self.slick_layer.data = json.loads(self.slick.to_crs('EPSG:4326').geometry.to_json())
+        self.slick_curve_layer.data = json.loads(self.slick_curves.to_crs('EPSG:4326').geometry.to_json())
 
         # update date display
-        #self.date_display.value = self.collect_time.strftime('%Y-%m-%d')
         self.date_display.value = self.df.iloc[ctr]['basename']
         
         # update truth dataframe display
