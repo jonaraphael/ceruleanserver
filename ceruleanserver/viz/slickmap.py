@@ -22,6 +22,7 @@ from tabulate import tabulate
 from utils import (ais_points_to_lines,
                    ais_points_to_trajectories,
                    associate_by_overlap,
+                   associate_by_overlap_weighted,
                    buffer_trajectories,
                    get_s1_tile_layer,
                    slicks_to_curves)
@@ -34,13 +35,16 @@ TRUTH_FILE = os.path.join(DATA_DIR, 'slick_truth_year1.csv')
 
 # define temporal parameters for trajectory estimation
 HOURS_BEFORE = 12
-NUM_TIMESTEPS = 12
+NUM_TIMESTEPS = 120
 
 # define buffering parameters for trajectories
-BUF_START = 200 # in meters
+BUF_START = 500 # in meters
 BUF_END = 15000 # in meters
 BUF_VEC = np.linspace(BUF_START, BUF_END, NUM_TIMESTEPS)
 
+WEIGHT_START = 1.0
+WEIGHT_END = 0.1
+WEIGHT_VEC = np.logspace(WEIGHT_START, WEIGHT_END, NUM_TIMESTEPS) / 10.0
 
 class SlickMap:
     def __init__(self):
@@ -219,18 +223,34 @@ class SlickMap:
         self.ais = self.ais.to_crs(self.utm_zone)
         self.slick = self.slick.to_crs(self.utm_zone)
 
+    def _associate_sample(self):
         # get trajectories from AIS data
         self.ais_trajectories = ais_points_to_trajectories(self.ais, self.time_vec)
+        if len(self.ais_trajectories) == 0:
+            return
 
         # get curves from slick data
-        self.slick_curves = slicks_to_curves(self.slick)
+        self.slick_clean, self.slick_curves = slicks_to_curves(self.slick)
 
         # build conic buffers around the trajectories
-        self.ais_gdf_buf = buffer_trajectories(self.ais_trajectories, BUF_VEC)
+        self.ais_gdf_buf, self.ais_weighted = buffer_trajectories(
+            self.ais_trajectories, 
+            BUF_VEC, 
+            WEIGHT_VEC
+        )
 
         # associate slick to AIS trajectories
-        self.slick_ais = associate_by_overlap(self.ais_trajectories, self.slick)
+        self.slick_ais = associate_by_overlap_weighted(
+            self.ais_trajectories, 
+            self.ais_gdf_buf,
+            self.ais_weighted, 
+            self.slick_clean,
+            self.slick_curves
+        )
+        
+        self.slick_ais['PID'] = self.basename
 
+    def _update_sample_map(self):
         # get interpolated trajectories as gdf
         # this is what we will use to plot the AIS tracks
         # also get the truth trajectories if they exist
@@ -250,7 +270,7 @@ class SlickMap:
         self.slick_curve_layer.data = json.loads(self.slick_curves.to_crs('EPSG:4326').geometry.to_json())
 
         # update date display
-        self.date_display.value = self.df.iloc[ctr]['basename']
+        self.date_display.value = self.basename
         
         # update truth dataframe display
         truth_df = pd.DataFrame(
@@ -265,29 +285,69 @@ class SlickMap:
             display(truth_df)
 
         # update model dataframe display
-        disp_df = self.slick_ais.copy()
-        if 'overlap' in disp_df:
-            disp_df = disp_df[['traj_id', 'overlap']]
-            disp_df = disp_df.reset_index(drop=True)
-            with self.model_df_display as disp:
-                clear_output()
-                display("Model Predictions")
-                display(disp_df.head(5))
-        else:
-            with self.model_df_display as disp:
-                clear_output()
-                print("No match found")
+        #disp_df = self.slick_ais.copy()
+        #with self.model_df_display as disp:
+        #    clear_output()
+        #    display("Model Predictions")
+        #    display(disp_df[['score', 'dist', 'angle_diff', 'traj_id']].head(5))
 
         # center map on the slick
         self.map.center = self.slick.dissolve().centroid.to_crs('EPSG:4326').iloc[0].coords[0][::-1]
 
     def _build_data_controls(self):
+        def run_all_samples(b):
+            input_file = 'results.geojson'
+            self.full_results = gpd.read_file(input_file)
+            #import pdb; pdb.set_trace()
+
+            self.run_all_button.button_style = 'warning'
+            '''
+            self.full_results = gpd.GeoDataFrame(
+                columns=[
+                    'PID', 
+                    'slick_index', 
+                    'geometry', 
+                    'temporal_score', 
+                    'mean_dist', 
+                    'angle_diff', 
+                    'traj_id'
+                ],
+                crs='EPSG:4326'
+            )
+            '''
+            for i in range(len(self.df)):
+                self.ctr = i
+                self.data_progress.value = self.ctr + 1
+                self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
+                
+                # skip if already in loaded file
+                if self.df.iloc[i]['basename'] in self.full_results['PID'].values:
+                    continue
+                else:
+                    self._load_sample(self.ctr)
+                    self._associate_sample()
+                    if len(self.ais_trajectories) == 0:
+                        continue
+
+                    # add results to full results
+                    self.full_results = pd.concat(
+                        [
+                            self.full_results, 
+                            self.slick_ais.to_crs('EPSG:4326')
+                        ]
+                    )
+                
+            self.run_all_button.button_style = 'success'
+            self.full_results.to_file(input_file, driver='GeoJSON')
+
         def next_sample(b):
             if self.ctr < len(self.df):
                 self.ctr += 1
                 self.data_progress.value = self.ctr + 1
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
                 self._load_sample(self.ctr)
+                self._associate_sample()
+                self._update_sample_map()
 
         def prev_sample(b):
             if self.ctr > 0:
@@ -295,12 +355,16 @@ class SlickMap:
                 self.data_progress.value = self.ctr + 1
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
                 self._load_sample(self.ctr)
+                self._associate_sample()
+                self._update_sample_map()
 
         def random_sample(b):
             self.ctr = np.random.randint(0, len(self.df) - 1)
             self.data_progress.value = self.ctr + 1
             self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
             self._load_sample(self.ctr)
+            self._associate_sample()
+            self._update_sample_map()
 
         def update_text(change):
             this_entry = self.df[self.df.basename == change['new']]
@@ -312,6 +376,15 @@ class SlickMap:
                 self.data_progress.value = self.ctr + 1
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
                 self._load_sample(self.ctr)
+
+        self.run_all_button = ipyw.Button(
+            description='Run All',
+            disabled=False,
+            button_style='info',
+            tooltip='Run all samples',
+            layout=ipyw.Layout(width='100px')
+        )
+        self.run_all_button.on_click(run_all_samples)
 
         self.next_button = ipyw.Button(
             description='',
@@ -368,6 +441,7 @@ class SlickMap:
 
         self.data_pane = ipyw.VBox(
             [
+                self.run_all_button,
                 ipyw.HBox(
                     [
                         self.random_button,
@@ -389,6 +463,8 @@ class SlickMap:
 
         self.map.add_control(self.data_control)
         self._load_sample(self.ctr)
+        self._associate_sample()
+        self._update_sample_map()
 
     def _build_layer_controls(self):
         self.layer_control = ipyl.LayersControl(position='topright')
