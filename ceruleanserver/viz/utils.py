@@ -7,6 +7,7 @@ import math
 
 import centerline.geometry
 from fastdtw import fastdtw
+import gdstk
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
@@ -15,6 +16,7 @@ import scipy.interpolate
 import scipy.spatial.distance
 import shapely.geometry
 import shapely.ops
+from shapely import frechet_distance
 
 import ee
 ee.Initialize()
@@ -46,6 +48,46 @@ def compute_dtw_distance(traj: mpd.Trajectory, curve: shapely.geometry.LineStrin
 
     # compute the DTW distance between the trajectory and the curve
     dist, _ = fastdtw(traj_coords, curve_coords, dist=scipy.spatial.distance.euclidean)
+    return dist
+
+
+def compute_frechet_distance(traj: mpd.Trajectory, curve: shapely.geometry.LineString):
+    """
+    Compute the frechet distance between a trajectory and a slick curve
+    """
+    # get the trajectory coordinates as points in descending time order from collect
+    traj_gdf = traj.to_point_gdf().sort_values(by='timestamp', ascending=False)
+
+    # take the points and put them in a linestring
+    traj_line = shapely.geometry.LineString(traj_gdf.geometry)
+
+    # get the first and last points of the slick curve
+    first_point = shapely.geometry.Point(curve.coords[0])
+    last_point = shapely.geometry.Point(curve.coords[-1])
+
+    # compute the distance from these points to the start of the trajectory
+    first_dist = first_point.distance(shapely.geometry.Point(traj_line.coords[0]))
+    last_dist = last_point.distance(shapely.geometry.Point(traj_line.coords[0]))
+    if last_dist < first_dist:
+        # reverse the slick curve
+        curve = shapely.geometry.LineString(list(curve.coords)[::-1])
+
+    # for every point in the curve, find the closest trajectory point and store it off
+    traj_points = list()
+    for curve_point in curve.coords:
+        # compute the distance between this point and every point in the trajectory
+        these_distances = list()
+        for traj_point in traj_line.coords:
+            dist = shapely.geometry.Point(curve_point).distance(shapely.geometry.Point(traj_point))
+            these_distances.append(dist)
+
+        closest_distance = min(these_distances)
+        closest_idx = these_distances.index(closest_distance)
+        traj_points.append(shapely.geometry.Point(traj_line.coords[closest_idx]))
+
+    # compute the frechet distance
+    traj_line_clip = shapely.geometry.LineString(traj_points)
+    dist = frechet_distance(traj_line_clip, curve)
     return dist
 
 
@@ -86,6 +128,7 @@ def associate_by_overlap_weighted(ais: mpd.TrajectoryCollection,
     # only consider trajectories that intersect slick detections
     ais_filt = list()
     weighted_filt = list()
+    buffered_filt = list()
     for idx, t in enumerate(ais):
         w = weighted[idx]
         b = buffered.iloc[idx]
@@ -98,6 +141,7 @@ def associate_by_overlap_weighted(ais: mpd.TrajectoryCollection,
         else:
             ais_filt.append(t)
             weighted_filt.append(w)
+            buffered_filt.append(b.geometry)
 
     associations = list()
     if not weighted_filt: # no associations found
@@ -105,9 +149,11 @@ def associate_by_overlap_weighted(ais: mpd.TrajectoryCollection,
         entry = dict()
         entry['geometry'] = slick.iloc[0].geometry
         entry['slick_index'] = None
+        entry['slick_size'] = None
         entry['temporal_score'] = None
-        entry['mean_dist'] = None
-        entry['angle_diff'] = None
+        entry['overlap_score'] = None
+        entry['frechet_dist'] = None
+        entry['total_score'] = None
         entry['traj_id'] = None
         associations.append(entry)
         associations = gpd.GeoDataFrame(associations, crs=slick.crs)
@@ -121,37 +167,34 @@ def associate_by_overlap_weighted(ais: mpd.TrajectoryCollection,
         s = slick.iloc[idx]
         c = curves.iloc[idx]
         
-        # compute direction of slick
-        angle = get_slick_curve_direction(c.geometry)
-
         # iterate over filtered trajectories
-        scores = list()
-        distances = list()
-        traj_ids = list()
-        traj_angles = list()
-        for t, w in zip(ais_filt, weighted_filt):
+        for t, w, b in zip(ais_filt, weighted_filt, buffered_filt):
             # spatially join the weighted trajectory to the slick
             s_gdf = gpd.GeoDataFrame(index=[0], geometry=[s.geometry], crs=slick.crs)
             matches = gpd.sjoin(w, s_gdf, how="inner", predicate="intersects")
             
             if matches.empty:
-                score = 0.0
+                temporal_score = 0.0
             else:
                 # out of the resulting matches, pick the highest weight
-                score = matches['weight'].max()
+                temporal_score = matches['weight'].max()
 
-            dist = compute_mean_euclidean_distance(t, s.geometry)
-            traj_angle = t.get_direction()
+            # compute percent overlap between buffered trajectory and slick
+            overlap_score = s.geometry.intersection(b).area / s.geometry.area
 
-            angle_diff = abs((angle % 180) - (traj_angle % 180))
-            angle_diff = min(angle_diff, 180 - angle_diff)
+            # compute frechet distance between trajectory and slick curve
+            frechet_dist = compute_frechet_distance(t, c.geometry)
 
+            total_score = 1.5*temporal_score + 1.0*overlap_score + 1000.0/frechet_dist
+            
             entry = dict()
             entry['geometry'] = s.geometry
             entry['slick_index'] = idx
-            entry['temporal_score'] = score
-            entry['mean_dist'] = dist
-            entry['angle_diff'] = angle_diff
+            entry['slick_size'] = s.geometry.area
+            entry['temporal_score'] = temporal_score
+            entry['overlap_score'] = overlap_score
+            entry['frechet_dist'] = frechet_dist
+            entry['total_score'] = total_score
             entry['traj_id'] = t.id
             
             associations.append(entry)

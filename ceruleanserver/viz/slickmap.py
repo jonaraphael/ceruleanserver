@@ -140,6 +140,8 @@ class SlickMap:
             }
         )
 
+
+
         self.slick_curve_layer = ipyl.GeoJSON(
             name="Slick Curve",
             style={
@@ -148,7 +150,6 @@ class SlickMap:
                 "weight": 1
             }
         )
-
         self.footprint_layer = ipyl.GeoJSON(
             name="Footprint",
             style={
@@ -158,7 +159,6 @@ class SlickMap:
                 "weight": 1
             }
         )
-
         self.s1_layer = ipyl.TileLayer(nowrap=True)
 
         self.map.add_layer(self.s1_layer)
@@ -285,23 +285,41 @@ class SlickMap:
             display(truth_df)
 
         # update model dataframe display
-        #disp_df = self.slick_ais.copy()
-        #with self.model_df_display as disp:
-        #    clear_output()
-        #    display("Model Predictions")
-        #    display(disp_df[['score', 'dist', 'angle_diff', 'traj_id']].head(5))
+        disp_df = self.slick_ais.copy()
+        disp_df = disp_df.sort_values(
+            [
+                'slick_index', 
+                'slick_size', 
+                'total_score'
+            ], 
+            ascending=[True, False, False]
+        ).groupby('slick_index')
+        with self.model_df_display as disp:
+            clear_output()
+            ctr = 0
+            for name, group in disp_df:
+                if ctr == 5:
+                    break
+                disp_group = group[
+                    [
+                        'total_score', 
+                        'temporal_score', 
+                        'overlap_score',
+                        'frechet_dist', 
+                        'traj_id']
+                    ].head(1)
+                display(disp_group)
+                ctr += 1
 
         # center map on the slick
         self.map.center = self.slick.dissolve().centroid.to_crs('EPSG:4326').iloc[0].coords[0][::-1]
 
     def _build_data_controls(self):
         def run_all_samples(b):
-            input_file = 'results.geojson'
-            self.full_results = gpd.read_file(input_file)
-            #import pdb; pdb.set_trace()
+            out_file = 'results_20230405.geojson'
+            #self.full_results = gpd.read_file(input_file)
 
             self.run_all_button.button_style = 'warning'
-            '''
             self.full_results = gpd.GeoDataFrame(
                 columns=[
                     'PID', 
@@ -314,7 +332,6 @@ class SlickMap:
                 ],
                 crs='EPSG:4326'
             )
-            '''
             for i in range(len(self.df)):
                 self.ctr = i
                 self.data_progress.value = self.ctr + 1
@@ -338,7 +355,7 @@ class SlickMap:
                     )
                 
             self.run_all_button.button_style = 'success'
-            self.full_results.to_file(input_file, driver='GeoJSON')
+            self.full_results.to_file(out_file, driver='GeoJSON')
 
         def next_sample(b):
             if self.ctr < len(self.df):
@@ -376,6 +393,8 @@ class SlickMap:
                 self.data_progress.value = self.ctr + 1
                 self.data_progress.description = f"{self.ctr+1}/{len(self.df)}"
                 self._load_sample(self.ctr)
+                self._associate_sample()
+                self._update_sample_map()
 
         self.run_all_button = ipyw.Button(
             description='Run All',
