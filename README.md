@@ -1,4 +1,4 @@
-# skytruth
+# SkyTruth Automatic AIS Analysis
 
 This repo is a place to develop code that will run on an EC2 instance in AWS cloud.
 
